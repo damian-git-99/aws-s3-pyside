@@ -60,7 +60,7 @@ class TestS3FileService(unittest.TestCase):
         # Verify API was called correctly
         self.mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            MaxKeys=1000,
+            MaxKeys=50,
             Delimiter='/'
         )
 
@@ -101,7 +101,7 @@ class TestS3FileService(unittest.TestCase):
         # Verify API was called with prefix
         self.mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            MaxKeys=1000,
+            MaxKeys=50,
             Prefix='folder1/',
             Delimiter='/'
         )
@@ -138,7 +138,7 @@ class TestS3FileService(unittest.TestCase):
         # Verify continuation token was passed
         self.mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            MaxKeys=1000,
+            MaxKeys=50,
             ContinuationToken='token123',
             Delimiter='/'
         )

@@ -71,7 +71,7 @@ class S3FileService:
         try:
             params = {
                 'Bucket': self.bucket_name,
-                'MaxKeys': 1000,
+                'MaxKeys': 50,
             }
         
             if prefix:

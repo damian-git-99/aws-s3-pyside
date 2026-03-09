@@ -23,8 +23,8 @@ The system SHALL provide a service layer that lists files from the root of an S3
 - **AND** for current iteration presenter always calls without prefix
 
 #### Scenario: Service handles pagination
-- **WHEN** listing a bucket with more than 1000 objects
-- **THEN** the service SHALL return the first 1000 objects
+- **WHEN** listing a bucket with more than 50 objects
+- **THEN** the service SHALL return the first 50 objects
 - **AND** provide a continuation token for the next page
 - **AND** subsequent calls with the token SHALL return the next page
 
