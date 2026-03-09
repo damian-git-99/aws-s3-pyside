@@ -12,9 +12,20 @@ The system SHALL mostrar una ventana principal que liste todos los folders y obj
 - **AND** la tabla contiene las columnas: Name, Size, Last Modified, Storage Class
 
 #### Scenario: Lista de objetos se muestra correctamente
-- **WHEN** el sistema carga los datos del bucket (mocked)
+- **WHEN** el sistema carga los datos del bucket desde S3 (no mocked)
 - **THEN** la tabla muestra cada objeto con: nombre, tamaño formateado, fecha de última modificación, clase de almacenamiento
 - **AND** los folders se muestran antes que los archivos
+- **AND** los datos provienen de la API real de AWS S3
+
+#### Scenario: Loading state is shown during S3 operations
+- **WHEN** los datos se están cargando desde S3
+- **THEN** se muestra un indicador de carga (spinner o texto "Loading...")
+- **AND** la tabla está deshabilitada temporalmente
+
+#### Scenario: Error state is displayed for S3 errors
+- **WHEN** ocurre un error de S3 (acceso denegado, bucket no encontrado, etc.)
+- **THEN** se muestra un mensaje de error amigable en la ventana
+- **AND** se incluye una acción para reintentar
 
 ### Requirement: Iconos por tipo de archivo
 The system SHALL mostrar un icono apropiado junto al nombre de cada archivo basado en su extensión o tipo MIME.

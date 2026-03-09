@@ -53,6 +53,31 @@ class MockView(BaseView):
         """Check if loading was shown."""
         return self._loading_shown
 
+    def show_error_with_retry(self, message: str, on_retry: callable) -> None:
+        """Mock show_error_with_retry - stores the error message and callback."""
+        self._error_message = message
+        self._retry_callback = on_retry
+
+    def show_load_more_button(self, show: bool = True) -> None:
+        """Mock show_load_more_button."""
+        self._load_more_button_visible = show
+
+    def get_retry_callback(self) -> Optional[callable]:
+        """Get the retry callback that was passed."""
+        return getattr(self, '_retry_callback', None)
+
+    def was_load_more_button_shown(self) -> bool:
+        """Check if load more button was shown."""
+        return getattr(self, '_load_more_button_visible', False)
+
+    def _show_empty_state(self, show: bool = True) -> None:
+        """Mock _show_empty_state."""
+        self._empty_state_shown = show
+
+    def was_empty_state_shown(self) -> bool:
+        """Check if empty state was shown."""
+        return getattr(self, '_empty_state_shown', False)
+
 
 def create_mock_view() -> MockView:
     """Factory function to create a MockView instance."""

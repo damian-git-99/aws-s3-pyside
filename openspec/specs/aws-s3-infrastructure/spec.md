@@ -1,3 +1,10 @@
+# aws-s3-infrastructure Specification
+
+## Purpose
+Defines the AWS S3 infrastructure requirements including dependencies, environment variables, and configuration documentation.
+
+## Requirements
+
 ### Requirement: AWS S3 dependencies installed
 The system SHALL include all necessary Python packages for AWS S3 integration.
 

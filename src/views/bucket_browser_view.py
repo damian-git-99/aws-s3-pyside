@@ -122,6 +122,14 @@ class BucketBrowserView(BaseView):
         Args:
             data: List of BucketObject instances to display
         """
+        # Show empty state message if no data
+        if not data:
+            self._show_empty_state(True)
+            self._table.setRowCount(0)
+            self._update_status(0)
+            return
+        
+        self._show_empty_state(False)
         self._table.setRowCount(len(data))
         
         for row, obj in enumerate(data):
@@ -184,3 +192,92 @@ class BucketBrowserView(BaseView):
                 self._status_label.setText("Loading...")
             else:
                 self._status_label.setText("Ready")
+
+    def show_error_with_retry(self, message: str, on_retry: callable) -> None:
+        """Show error message with retry button.
+
+        Args:
+            message: Error message to display
+            on_retry: Callback function when retry button is clicked
+        """
+        from PySide6.QtWidgets import QMessageBox, QPushButton
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Error")
+        msg_box.setText(message)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+
+        # Add retry button
+        retry_btn = msg_box.addButton("Retry", QMessageBox.ButtonRole.ActionRole)
+        retry_btn.clicked.connect(on_retry)
+
+        # Add close button
+        msg_box.addButton(QMessageBox.StandardButton.Close)
+
+        msg_box.exec()
+
+    def show_load_more_button(self, show: bool = True) -> None:
+        """Show or hide Load More button.
+
+        Args:
+            show: True to show button, False to hide
+        """
+        if not hasattr(self, '_load_more_btn'):
+            # Create button if it doesn't exist
+            self._load_more_btn = QPushButton("Load More")
+            self._load_more_btn.setObjectName("load_more_btn")
+            self._load_more_btn.clicked.connect(self._on_load_more_clicked)
+            # Add to layout after table
+            if self._table and self.layout():
+                # Find position to insert (before status label)
+                layout = self.layout()
+                index = layout.indexOf(self._status_label)
+                layout.insertWidget(index, self._load_more_btn)
+
+        if hasattr(self, '_load_more_btn'):
+            self._load_more_btn.setVisible(show)
+
+    def _on_load_more_clicked(self) -> None:
+        """Handle Load More button click."""
+        if self._presenter:
+            self._presenter.load_more()
+
+    def _show_empty_state(self, show: bool = True) -> None:
+        """Show or hide the empty state message.
+
+        Args:
+            show: True to show empty state, False to hide
+        """
+        if not hasattr(self, '_empty_state_label'):
+            # Create empty state label if it doesn't exist
+            from PySide6.QtWidgets import QLabel
+            from PySide6.QtCore import Qt
+            from PySide6.QtGui import QFont
+
+            self._empty_state_label = QLabel("📁 No files uploaded yet\n\nThis bucket is empty. Upload files to see them here.")
+            self._empty_state_label.setObjectName("empty_state_label")
+            self._empty_state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._empty_state_label.setWordWrap(True)
+
+            # Style the empty state
+            font = QFont()
+            font.setPointSize(12)
+            self._empty_state_label.setFont(font)
+            self._empty_state_label.setStyleSheet("""
+                QLabel#empty_state_label {
+                    color: #666666;
+                    padding: 40px;
+                    background-color: #f5f5f5;
+                    border: 2px dashed #cccccc;
+                    border-radius: 8px;
+                    margin: 20px;
+                }
+            """)
+
+            # Add to layout (hide table when showing empty state)
+            if self.layout():
+                self.layout().addWidget(self._empty_state_label)
+
+        if hasattr(self, '_empty_state_label'):
+            self._empty_state_label.setVisible(show)
+            self._table.setVisible(not show)
