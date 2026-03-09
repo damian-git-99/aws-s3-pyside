@@ -107,8 +107,8 @@ class BucketBrowserView(BaseView):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         
-        # Enable sorting
-        self._table.setSortingEnabled(True)
+        # Disable sorting - folders-first order comes from service
+        self._table.setSortingEnabled(False)
         
         # Selection mode
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -138,22 +138,16 @@ class BucketBrowserView(BaseView):
             name_item.setText(obj.name)
             icon = FileIconManager.get_icon_for_object(obj)
             name_item.setIcon(icon)
-            
-            # Set sorting data - folders first, then alphabetical
-            sort_key = f"{'0' if obj.is_folder else '1'}{obj.name.lower()}"
-            name_item.setData(Qt.UserRole, sort_key)
             self._table.setItem(row, 0, name_item)
             
             # Size column
             size_item = QTableWidgetItem()
             size_item.setText(obj.get_formatted_size())
-            size_item.setData(Qt.UserRole, obj.size)
             self._table.setItem(row, 1, size_item)
             
             # Last Modified column
             modified_item = QTableWidgetItem()
             modified_item.setText(obj.last_modified.strftime("%Y-%m-%d %H:%M"))
-            modified_item.setData(Qt.UserRole, obj.last_modified)
             self._table.setItem(row, 2, modified_item)
             
             # Storage Class column

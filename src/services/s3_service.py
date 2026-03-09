@@ -68,87 +68,94 @@ class S3FileService:
             S3CredentialsError: If AWS credentials are missing/invalid
             S3ConnectionError: If cannot connect to AWS
         """
-        try:
-            params = {
-                'Bucket': self.bucket_name,
-                'MaxKeys': 50,
-            }
+        objects = []
+        common_prefixes = []
         
-            if prefix:
-                params['Prefix'] = prefix
-                params['Delimiter'] = '/'
-            else:
-                # For root level, we want to show all root objects
-                # Using delimiter to get common prefixes (folders) at root
-                params['Delimiter'] = '/'
+        current_token = continuation_token
+        first_call = True
+        
+        while first_call or current_token:
+            first_call = False
             
-            if continuation_token:
-                params['ContinuationToken'] = continuation_token
+            try:
+                params = {
+                    'Bucket': self.bucket_name,
+                    'MaxKeys': 50,
+                }
             
-            response = self._s3.list_objects_v2(**params)
-            
-            objects = []
-            
-            # Process common prefixes (folders)
-            for prefix_data in response.get('CommonPrefixes', []):
-                prefix_name = prefix_data['Prefix']
-                # Remove trailing slash for display
-                display_name = prefix_name.rstrip('/')
-                # If we have a prefix, extract just the folder name (relative to current path)
-                if prefix and display_name.startswith(prefix):
-                    relative_name = display_name[len(prefix):]
-                    if relative_name:
-                        display_name = relative_name
-                objects.append(BucketObject(
-                    name=display_name,
-                    size=0,
-                    last_modified=datetime.now(),
-                    storage_class='FOLDER',
-                    is_folder=True
-                ))
-            
-            # Process actual objects (files)
-            for obj in response.get('Contents', []):
-                key = obj['Key']
-                # Skip the prefix itself if it's a "folder object"
-                if key.endswith('/'):
-                    continue
+                if prefix:
+                    params['Prefix'] = prefix
+                    params['Delimiter'] = '/'
+                else:
+                    params['Delimiter'] = '/'
+                
+                if current_token:
+                    params['ContinuationToken'] = current_token
+                
+                response = self._s3.list_objects_v2(**params)
+                
+                # Collect common prefixes (folders) from all pages
+                for prefix_data in response.get('CommonPrefixes', []):
+                    common_prefixes.append(prefix_data['Prefix'])
+                
+                # Process actual objects (files)
+                for obj in response.get('Contents', []):
+                    key = obj['Key']
+                    # Skip the prefix itself if it's a "folder object"
+                    if key.endswith('/'):
+                        continue
+                        
+                    # Extract just the filename (after last /)
+                    display_name = key.split('/')[-1] if '/' in key else key
                     
-                # Extract just the filename (after last /)
-                display_name = key.split('/')[-1] if '/' in key else key
+                    objects.append(BucketObject(
+                        name=display_name,
+                        size=obj['Size'],
+                        last_modified=obj['LastModified'],
+                        storage_class=obj.get('StorageClass', 'STANDARD'),
+                        is_folder=False
+                    ))
                 
-                objects.append(BucketObject(
-                    name=display_name,
-                    size=obj['Size'],
-                    last_modified=obj['LastModified'],
-                    storage_class=obj.get('StorageClass', 'STANDARD'),
-                    is_folder=False
-                ))
-            
-            # Sort: folders first, then files alphabetically
-            objects.sort(key=lambda x: (not x.is_folder, x.name.lower()))
-            
-            next_token = response.get('NextContinuationToken')
-            is_truncated = response.get('IsTruncated', False)
-            
-            return S3ListResult(
-                objects=objects,
-                continuation_token=next_token,
-                is_truncated=is_truncated
-            )
-            
-        except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-            if error_code == '403' or error_code == 'AccessDenied':
-                raise S3AccessDeniedError(self.bucket_name) from e
-            elif error_code == '404' or error_code == 'NoSuchBucket':
-                raise S3BucketNotFoundError(self.bucket_name) from e
-            else:
-                # Re-raise as connection error for other client errors
+                current_token = response.get('NextContinuationToken')
+                
+            except ClientError as e:
+                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+                if error_code == '403' or error_code == 'AccessDenied':
+                    raise S3AccessDeniedError(self.bucket_name) from e
+                elif error_code == '404' or error_code == 'NoSuchBucket':
+                    raise S3BucketNotFoundError(self.bucket_name) from e
+                else:
+                    raise S3ConnectionError() from e
+                    
+            except NoCredentialsError as e:
+                raise S3CredentialsError() from e
+                
+            except EndpointConnectionError as e:
                 raise S3ConnectionError() from e
-                
-        except NoCredentialsError as e:
-            raise S3CredentialsError() from e
-            
-        except EndpointConnectionError as e:
-            raise S3ConnectionError() from e
+        
+        # Process collected common prefixes (folders)
+        for prefix_name in common_prefixes:
+            display_name = prefix_name.rstrip('/')
+            if prefix and display_name.startswith(prefix):
+                relative_name = display_name[len(prefix):]
+                if relative_name:
+                    display_name = relative_name
+            objects.append(BucketObject(
+                name=display_name,
+                size=0,
+                last_modified=datetime.now(),
+                storage_class='FOLDER',
+                is_folder=True
+            ))
+        
+        # Sort: folders first, then files alphabetically
+        objects.sort(key=lambda x: (not x.is_folder, x.name.lower()))
+        
+        next_token = response.get('NextContinuationToken') if response else None
+        is_truncated = response.get('IsTruncated', False) if response else False
+        
+        return S3ListResult(
+            objects=objects,
+            continuation_token=next_token,
+            is_truncated=is_truncated
+        )
