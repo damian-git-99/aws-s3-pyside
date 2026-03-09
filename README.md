@@ -41,6 +41,23 @@ uv pip install -r requirements.txt
 uv add PySide6
 ```
 
+## AWS S3 Setup
+
+To use AWS S3 features, you need to configure your AWS credentials:
+
+1. Copy the environment template:
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` with your AWS credentials:
+   - `AWS_ACCESS_KEY_ID`: Your AWS access key ID
+   - `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key
+   - `AWS_DEFAULT_REGION`: AWS region (e.g., `us-east-1`)
+   - `AWS_S3_BUCKET_NAME`: Your S3 bucket name
+
+**Security Warning**: Never commit your `.env` file or share your AWS credentials. The `.env` file is already in `.gitignore` to prevent accidental commits. You can obtain AWS credentials from the AWS IAM Console.
+
 ## Running the Application
 
 ```bash
