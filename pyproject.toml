@@ -1,0 +1,15 @@
+[project]
+name = "s3-file-manager"
+version = "0.1.0"
+description = "Desktop application for managing files in AWS S3"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.5.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+dev-dependencies = []
