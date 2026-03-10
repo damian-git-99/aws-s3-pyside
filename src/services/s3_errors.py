@@ -34,3 +34,12 @@ class S3ConnectionError(S3Error):
     
     def __init__(self):
         super().__init__("Cannot connect to AWS. Please check your network configuration.")
+
+
+class S3UploadError(S3Error):
+    """Raised when file upload to S3 fails."""
+    
+    def __init__(self, filename: str, reason: str):
+        self.filename = filename
+        self.reason = reason
+        super().__init__(f"Failed to upload '{filename}': {reason}")
