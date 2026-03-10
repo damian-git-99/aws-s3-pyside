@@ -51,6 +51,22 @@ class IBucketBrowserView(Protocol):
         """Show error message."""
         ...
 
+    def show_upload_dialog(self) -> Optional[str]:
+        """Show file picker dialog for upload."""
+        ...
+    
+    def show_upload_progress_dialog(self, file_path: str) -> Any:
+        """Show progress dialog for upload."""
+        ...
+    
+    def close_upload_progress_dialog(self, progress_dialog: Any) -> None:
+        """Close the upload progress dialog."""
+        ...
+    
+    def show_message(self, message: str) -> None:
+        """Show a message in the status bar."""
+        ...
+
 
 class IBucketBrowserPresenter(Protocol):
     """Protocol for Bucket Browser Presenter."""

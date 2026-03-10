@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from random import choice, randint
 
 from src.mvp.base_model import BaseModel
@@ -27,7 +27,7 @@ class BucketBrowserModel(BaseModel):
         """Refresh data from source (mock: reload with variations)."""
         self._load_mock_data()
         self.notify_data_changed()
-    
+
     def _load_mock_data(self) -> None:
         """Load mock data for development and testing."""
         base_date = datetime.now()
