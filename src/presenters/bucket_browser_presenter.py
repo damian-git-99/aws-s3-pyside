@@ -3,6 +3,7 @@ import os
 import logging
 
 from PySide6.QtCore import QThread, Signal
+from PySide6.QtWidgets import QMessageBox
 
 from src.mvp.base_presenter import BasePresenter
 from src.models.bucket_browser_model import BucketBrowserModel
@@ -118,11 +119,25 @@ class BucketBrowserPresenter(BasePresenter):
 
     def initialize(self) -> None:
         """Initialize the presenter and load initial data."""
+        logger.debug("Initialize: starting")
         if self._s3_service:
             self._bucket_name = self._s3_service.bucket_name
+            logger.debug(f"Initialize: S3 service found, bucket={self._bucket_name}")
+            # Set S3 service in model for deletion operations
+            self._model.set_s3_service(self._s3_service)
+            logger.debug("Initialize: S3 service set in model")
         else:
             self._bucket_name = "Bucket"
+            logger.debug("Initialize: No S3 service, using mock")
+        
+        logger.debug("Initialize: connecting model signals")
+        # Connect model signals
+        self._model.signals.file_deleted.connect(self._on_file_deleted)
+        self._model.signals.error_occurred.connect(self._on_model_error)
+        
+        logger.debug("Initialize: loading bucket contents")
         self._load_bucket_contents()
+        logger.debug("Initialize: complete")
 
     def navigate_to_folder(self, folder_name: str) -> None:
         """Navigate into a folder.
@@ -130,10 +145,12 @@ class BucketBrowserPresenter(BasePresenter):
         Args:
             folder_name: Name of the folder to navigate into
         """
+        logger.debug(f"navigate_to_folder called with: {folder_name}")
         if self._current_prefix:
             new_prefix = self._current_prefix + folder_name + "/"
         else:
             new_prefix = folder_name + "/"
+        logger.debug(f"new_prefix: {new_prefix}")
         self.navigate_to_prefix(new_prefix)
 
     def navigate_to_prefix(self, prefix: Optional[str]) -> None:
@@ -188,27 +205,40 @@ class BucketBrowserPresenter(BasePresenter):
 
     def on_item_double_clicked(self, object_name: str, is_folder: bool) -> None:
         """Handle double-click on a table item.
-
+        
         Args:
             object_name: Name of the clicked object
             is_folder: Whether the object is a folder
         """
+        logger.debug(f"on_item_double_clicked: object={object_name}, is_folder={is_folder}")
         if is_folder:
+            logger.debug(f"Navigating to folder: {object_name}")
             self.navigate_to_folder(object_name)
+        logger.debug("on_item_double_clicked: complete")
 
     def _update_navigation_ui(self) -> None:
         """Update the view with navigation UI elements."""
-        breadcrumb = self.get_breadcrumb()
-        self._view.update_breadcrumb(breadcrumb)
+        try:
+            logger.debug("_update_navigation_ui: starting")
+            breadcrumb = self.get_breadcrumb()
+            logger.debug(f"_update_navigation_ui: breadcrumb={breadcrumb}")
+            self._view.update_breadcrumb(breadcrumb)
 
-        can_go_up = self._current_prefix is not None
-        self._view.enable_navigation_buttons(can_go_up=can_go_up)
+            can_go_up = self._current_prefix is not None
+            logger.debug(f"_update_navigation_ui: can_go_up={can_go_up}")
+            self._view.enable_navigation_buttons(can_go_up=can_go_up)
 
-        if self._current_prefix:
-            path = "/" + self._current_prefix
-            self._view.setWindowTitle(f"Bucket Browser - {self._bucket_name}{path}")
-        else:
-            self._view.setWindowTitle(f"Bucket Browser - {self._bucket_name}")
+            if self._current_prefix:
+                path = "/" + self._current_prefix
+                logger.debug(f"_update_navigation_ui: setting title with path={path}")
+                self._view.setWindowTitle(f"Bucket Browser - {self._bucket_name}{path}")
+            else:
+                logger.debug("_update_navigation_ui: setting title to root")
+                self._view.setWindowTitle(f"Bucket Browser - {self._bucket_name}")
+            logger.debug("_update_navigation_ui: complete")
+        except Exception as e:
+            logger.error(f"_update_navigation_ui: error: {str(e)}", exc_info=True)
+            self._view.show_error(f"Navigation UI Error: {str(e)}")
 
     def _load_bucket_contents(self, append: bool = False) -> None:
         """Load bucket contents from S3 service.
@@ -341,3 +371,53 @@ class BucketBrowserPresenter(BasePresenter):
         )
         if self._upload_worker:
             self._upload_worker = None
+
+    def handle_delete_file(self, filename: str) -> None:
+        """Handle file deletion request from view.
+        
+        Shows a confirmation dialog and deletes the file if user confirms.
+        
+        Args:
+            filename: Name of the file to delete (display name, not full key)
+        """
+        # Show confirmation dialog
+        reply = QMessageBox.question(
+            self._view,
+            "Confirm Deletion",
+            f"Are you sure you want to delete '{filename}'?\n\nThis action cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No  # Default to No (safest choice)
+        )
+        
+        if reply == QMessageBox.No:
+            return  # User cancelled
+        
+        # Construct the full S3 key (path) for deletion
+        if self._current_prefix:
+            key = f"{self._current_prefix}{filename}"
+        else:
+            key = filename
+        
+        # Call model to delete the file
+        try:
+            self._model.delete_file(key)
+        except Exception as e:
+            self._view.show_error(f"Error deleting file: {str(e)}")
+
+    def _on_file_deleted(self, filename: str) -> None:
+        """Handle successful file deletion from model.
+        
+        Args:
+            filename: Name of the deleted file
+        """
+        self._view.show_message(f"File '{filename}' deleted successfully")
+        # Refresh the file list to show current state
+        self.on_refresh_clicked()
+
+    def _on_model_error(self, error_message: str) -> None:
+        """Handle error signal from model.
+        
+        Args:
+            error_message: Error description
+        """
+        self._view.show_error(error_message)

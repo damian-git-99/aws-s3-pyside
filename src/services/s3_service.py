@@ -16,6 +16,8 @@ from src.services.s3_errors import (
     S3ConnectionError,
     S3CredentialsError,
     S3UploadError,
+    S3DeleteError,
+    S3ObjectNotFoundError,
 )
 
 
@@ -227,3 +229,40 @@ class S3FileService:
 
         except Exception as e:
             raise S3UploadError(key, str(e)) from e
+
+    def delete_object(self, key: str) -> None:
+        """Delete an object from S3 bucket.
+        
+        Args:
+            key: The S3 key (path) of the object to delete
+            
+        Raises:
+            S3AccessDeniedError: If credentials lack bucket delete permission
+            S3BucketNotFoundError: If bucket doesn't exist
+            S3ObjectNotFoundError: If object doesn't exist in bucket
+            S3CredentialsError: If AWS credentials are missing/invalid
+            S3ConnectionError: If cannot connect to AWS
+            S3DeleteError: If deletion fails for other reasons
+        """
+        try:
+            self._s3.delete_object(Bucket=self.bucket_name, Key=key)
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            if error_code == '403' or error_code == 'AccessDenied':
+                raise S3AccessDeniedError(self.bucket_name) from e
+            elif error_code == '404' or error_code == 'NoSuchBucket':
+                raise S3BucketNotFoundError(self.bucket_name) from e
+            elif error_code == 'NoSuchKey':
+                raise S3ObjectNotFoundError(key) from e
+            else:
+                raise S3DeleteError(key, e.response.get('Error', {}).get('Message', str(e))) from e
+                
+        except NoCredentialsError as e:
+            raise S3CredentialsError() from e
+            
+        except EndpointConnectionError as e:
+            raise S3ConnectionError() from e
+            
+        except Exception as e:
+            raise S3DeleteError(key, str(e)) from e

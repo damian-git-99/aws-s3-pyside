@@ -1,9 +1,19 @@
 from typing import Optional, List, Tuple
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QToolBar, QPushButton, QLabel, QMenuBar, QMenu, QMainWindow
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QToolBar,
+    QPushButton,
+    QLabel,
+    QMenuBar,
+    QMenu,
+    QMainWindow,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 
 from src.mvp.base_view import BaseView
@@ -13,10 +23,10 @@ from src.utils.file_icons import FileIconManager
 
 class BucketBrowserView(BaseView):
     """View for the bucket browser main window.
-    
+
     Displays a table with bucket objects (files and folders).
     """
-    
+
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._table: Optional[QTableWidget] = None
@@ -28,127 +38,145 @@ class BucketBrowserView(BaseView):
         self._breadcrumb_widget: Optional[QWidget] = None
         self._breadcrumb_actions: List[QAction] = []
         self.setup_ui()
-    
+
     def setup_ui(self) -> None:
         """Setup the UI components."""
         self.setWindowTitle("Bucket Browser")
         self.resize(800, 600)
-        
+
         # Main layout
         layout = QVBoxLayout()
         layout.setSpacing(0)
         layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # Menu Bar
         self._setup_menu_bar()
         if self._menu_bar:
             layout.setMenuBar(self._menu_bar)
-        
+
         # Toolbar
         self._setup_toolbar()
         if self._toolbar:
             layout.addWidget(self._toolbar)
-        
+
         # Table
         self._setup_table()
         if self._table:
             layout.addWidget(self._table)
-        
+
         # Status bar
         self._status_label = QLabel("Ready")
         layout.addWidget(self._status_label)
-        
+
         self.setLayout(layout)
-    
+
     def _setup_toolbar(self) -> None:
         """Setup the toolbar with action buttons."""
         self._toolbar = QToolBar()
-        
+
         # Home button
         self._home_btn = QPushButton("Home")
         self._home_btn.setObjectName("home_btn")
         self._home_btn.clicked.connect(self._on_home_clicked)
         self._toolbar.addWidget(self._home_btn)
-        
+
         # Up button
         self._up_btn = QPushButton("Up")
         self._up_btn.setObjectName("up_btn")
         self._up_btn.clicked.connect(self._on_up_clicked)
         self._toolbar.addWidget(self._up_btn)
-        
+
         # Refresh button
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setObjectName("refresh_btn")
         refresh_btn.clicked.connect(self._on_refresh_clicked)
         self._toolbar.addWidget(refresh_btn)
-        
+
         # Spacer
         spacer = QWidget()
         spacer.setFixedWidth(10)
         self._toolbar.addWidget(spacer)
-        
+
         # Upload button (placeholder)
         upload_btn = QPushButton("Upload")
         upload_btn.setObjectName("upload_btn")
         upload_btn.clicked.connect(self._on_upload_clicked)
         self._toolbar.addWidget(upload_btn)
-        
+
+        # Delete button - deletes selected file
+        delete_btn = QPushButton("Delete")
+        delete_btn.setObjectName("delete_btn")
+        delete_btn.setFixedSize(80, 28)
+        delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        delete_btn.clicked.connect(self._on_delete_selected_clicked)
+        self._toolbar.addWidget(delete_btn)
+
         # Breadcrumb area (stretch)
         self._breadcrumb_widget = QWidget()
         self._breadcrumb_layout = QHBoxLayout(self._breadcrumb_widget)
         self._breadcrumb_layout.setContentsMargins(5, 0, 5, 0)
         self._breadcrumb_layout.addStretch()
         self._toolbar.addWidget(self._breadcrumb_widget)
-        
+
         # Disable navigation buttons initially (at root)
         self.enable_navigation_buttons(can_go_up=False)
-    
+
     def _setup_menu_bar(self) -> None:
         """Setup the menu bar."""
         self._menu_bar = QMenuBar()
-        
+
         # File menu
         file_menu = self._menu_bar.addMenu("File")
         file_menu.addAction("Exit", self.close)
-        
+
         # View menu
         view_menu = self._menu_bar.addMenu("View")
         view_menu.addAction("Refresh", self._on_refresh_clicked)
-        
+
         # Help menu
         help_menu = self._menu_bar.addMenu("Help")
         help_menu.addAction("About")
-    
+
     def _setup_table(self) -> None:
         """Setup the table widget."""
         self._table = QTableWidget()
         self._table.setColumnCount(4)
-        self._table.setHorizontalHeaderLabels([
-            "Name", "Size", "Last Modified", "Storage Class"
-        ])
-        
+        self._table.setHorizontalHeaderLabels(
+            ["Name", "Size", "Last Modified", "Storage Class"]
+        )
+
         # Configure header
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        
+
         # Disable sorting - folders-first order comes from service
         self._table.setSortingEnabled(False)
-        
+
         # Selection mode
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
-        
+
         # Hide vertical header (row numbers)
         self._table.verticalHeader().setVisible(False)
-        
+
         # Connect double-click signal
         self._table.cellDoubleClicked.connect(self._on_table_double_clicked)
-    
+
     def display_data(self, data: List[BucketObject]) -> None:
         """Display bucket objects in the table.
-        
+
         Args:
             data: List of BucketObject instances to display
         """
@@ -159,10 +187,10 @@ class BucketBrowserView(BaseView):
             self._table.setRowCount(0)
             self._update_status(0)
             return
-        
+
         self._show_empty_state(False)
         self._table.setRowCount(len(data))
-        
+
         for row, obj in enumerate(data):
             # Name column with icon
             name_item = QTableWidgetItem()
@@ -170,46 +198,80 @@ class BucketBrowserView(BaseView):
             icon = FileIconManager.get_icon_for_object(obj)
             name_item.setIcon(icon)
             self._table.setItem(row, 0, name_item)
-            
+
             # Size column
             size_item = QTableWidgetItem()
             size_item.setText(obj.get_formatted_size())
             self._table.setItem(row, 1, size_item)
-            
+
             # Last Modified column
             modified_item = QTableWidgetItem()
             modified_item.setText(obj.last_modified.strftime("%Y-%m-%d %H:%M"))
             self._table.setItem(row, 2, modified_item)
-            
+ 
             # Storage Class column
             storage_item = QTableWidgetItem()
             storage_item.setText(obj.storage_class)
             self._table.setItem(row, 3, storage_item)
-        
+
         # Update status
         self._update_status(len(data))
-    
+
     def _update_status(self, count: int) -> None:
         """Update the status label with object count."""
         if self._status_label:
             self._status_label.setText(f"{count} objects")
-    
+
     def _on_refresh_clicked(self) -> None:
         """Handle refresh button click."""
         if self._presenter:
             self._presenter.on_refresh_clicked()
-    
+
     def _on_upload_clicked(self) -> None:
         """Handle upload button click."""
         if self._presenter:
             self._presenter.on_upload_clicked()
-    
+
+    def _on_delete_selected_clicked(self) -> None:
+        """Handle delete button click - deletes selected file/folder."""
+        if not self._presenter:
+            return
+        
+        # Get selected row
+        selected_rows = self._table.selectionModel().selectedRows()
+        if not selected_rows:
+            self.show_error("No file selected. Please select a file to delete.")
+            return
+        
+        row = selected_rows[0].row()
+        
+        # Get the filename from first column
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return
+        
+        filename = name_item.text()
+        
+        # Check if it's a folder - don't allow deleting folders
+        is_folder = False
+        for obj in getattr(self, '_current_data', []):
+            if obj.name == filename:
+                is_folder = obj.is_folder
+                break
+        
+        if is_folder:
+            self.show_error("Cannot delete folders. Only files can be deleted.")
+            return
+        
+        # Call presenter to handle deletion
+        self._presenter.handle_delete_file(filename)
+
     def show_error(self, message: str) -> None:
         """Show error message in status bar."""
         if self._status_label:
             self._status_label.setText(f"Error: {message}")
             self._status_label.setStyleSheet("color: red;")
-    
+
     def show_loading(self, show: bool = True) -> None:
         """Show or hide loading indicator."""
         if self._status_label:
@@ -247,7 +309,7 @@ class BucketBrowserView(BaseView):
         Args:
             show: True to show button, False to hide
         """
-        if not hasattr(self, '_load_more_btn'):
+        if not hasattr(self, "_load_more_btn"):
             # Create button if it doesn't exist
             self._load_more_btn = QPushButton("Load More")
             self._load_more_btn.setObjectName("load_more_btn")
@@ -259,7 +321,7 @@ class BucketBrowserView(BaseView):
                 index = layout.indexOf(self._status_label)
                 layout.insertWidget(index, self._load_more_btn)
 
-        if hasattr(self, '_load_more_btn'):
+        if hasattr(self, "_load_more_btn"):
             self._load_more_btn.setVisible(show)
 
     def _on_load_more_clicked(self) -> None:
@@ -273,13 +335,15 @@ class BucketBrowserView(BaseView):
         Args:
             show: True to show empty state, False to hide
         """
-        if not hasattr(self, '_empty_state_label'):
+        if not hasattr(self, "_empty_state_label"):
             # Create empty state label if it doesn't exist
             from PySide6.QtWidgets import QLabel
             from PySide6.QtCore import Qt
             from PySide6.QtGui import QFont
 
-            self._empty_state_label = QLabel("📁 No files uploaded yet\n\nThis bucket is empty. Upload files to see them here.")
+            self._empty_state_label = QLabel(
+                "📁 No files uploaded yet\n\nThis bucket is empty. Upload files to see them here."
+            )
             self._empty_state_label.setObjectName("empty_state_label")
             self._empty_state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._empty_state_label.setWordWrap(True)
@@ -288,7 +352,8 @@ class BucketBrowserView(BaseView):
             font = QFont()
             font.setPointSize(12)
             self._empty_state_label.setFont(font)
-            self._empty_state_label.setStyleSheet("""
+            self._empty_state_label.setStyleSheet(
+                """
                 QLabel#empty_state_label {
                     color: #666666;
                     padding: 40px;
@@ -297,38 +362,39 @@ class BucketBrowserView(BaseView):
                     border-radius: 8px;
                     margin: 20px;
                 }
-            """)
+            """
+            )
 
             # Add to layout (hide table when showing empty state)
             if self.layout():
                 self.layout().addWidget(self._empty_state_label)
 
-        if hasattr(self, '_empty_state_label'):
+        if hasattr(self, "_empty_state_label"):
             self._empty_state_label.setVisible(show)
             self._table.setVisible(not show)
 
     def _on_table_double_clicked(self, row: int, col: int) -> None:
         """Handle double-click on table cell.
-        
+
         Args:
             row: Row that was clicked
             col: Column that was clicked
         """
         if not self._presenter or not self._table:
             return
-        
+
         name_item = self._table.item(row, 0)
         if not name_item:
             return
-        
+
         object_name = name_item.text()
-        
+
         is_folder = False
-        for obj in getattr(self, '_current_data', []):
+        for obj in getattr(self, "_current_data", []):
             if obj.name == object_name:
                 is_folder = obj.is_folder
                 break
-        
+
         self._presenter.on_item_double_clicked(object_name, is_folder)
 
     def _on_home_clicked(self) -> None:
@@ -343,7 +409,7 @@ class BucketBrowserView(BaseView):
 
     def _on_breadcrumb_clicked(self, prefix: Optional[str]) -> None:
         """Handle breadcrumb segment click.
-        
+
         Args:
             prefix: The prefix to navigate to (None for root)
         """
@@ -352,34 +418,39 @@ class BucketBrowserView(BaseView):
 
     def update_breadcrumb(self, path_segments: List[Tuple[str, Optional[str]]]) -> None:
         """Update the breadcrumb display.
-        
+
         Args:
             path_segments: List of tuples (display_name, prefix) for each segment
         """
-        if not hasattr(self, '_breadcrumb_layout'):
+        if not hasattr(self, "_breadcrumb_layout"):
             return
-        
+
         while self._breadcrumb_layout.count() > 1:
             item = self._breadcrumb_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        
+
         self._breadcrumb_actions.clear()
-        
+
         for i, (name, prefix) in enumerate(path_segments):
             if i > 0:
                 separator = QLabel(">")
                 separator.setStyleSheet("color: #999999; padding: 0 2px;")
-                self._breadcrumb_layout.insertWidget(self._breadcrumb_layout.count() - 1, separator)
-            
+                self._breadcrumb_layout.insertWidget(
+                    self._breadcrumb_layout.count() - 1, separator
+                )
+
             btn = QPushButton(name)
             btn.setFlat(True)
             btn.setObjectName(f"breadcrumb_{i}")
             btn.setStyleSheet("QPushButton { padding: 2px 4px; }")
-            
+
             if i < len(path_segments) - 1:
-                btn.clicked.connect(lambda checked, p=prefix: self._on_breadcrumb_clicked(p))
-                btn.setStyleSheet("""
+                btn.clicked.connect(
+                    lambda checked, p=prefix: self._on_breadcrumb_clicked(p)
+                )
+                btn.setStyleSheet(
+                    """
                     QPushButton {
                         color: #0066cc;
                         text-decoration: underline;
@@ -390,9 +461,11 @@ class BucketBrowserView(BaseView):
                     QPushButton:hover {
                         color: #0033aa;
                     }
-                """)
+                """
+                )
             else:
-                btn.setStyleSheet("""
+                btn.setStyleSheet(
+                    """
                     QPushButton {
                         color: #333333;
                         font-weight: bold;
@@ -400,13 +473,16 @@ class BucketBrowserView(BaseView):
                         border: none;
                         padding: 2px 4px;
                     }
-                """)
-            
-            self._breadcrumb_layout.insertWidget(self._breadcrumb_layout.count() - 1, btn)
+                """
+                )
+
+            self._breadcrumb_layout.insertWidget(
+                self._breadcrumb_layout.count() - 1, btn
+            )
 
     def enable_navigation_buttons(self, can_go_up: bool) -> None:
         """Enable or disable navigation buttons.
-        
+
         Args:
             can_go_up: Whether the Up button should be enabled
         """
@@ -417,27 +493,24 @@ class BucketBrowserView(BaseView):
 
     def show_upload_dialog(self) -> Optional[str]:
         """Show file picker dialog for upload.
-        
+
         Returns:
             File path selected, or None if cancelled
         """
         from PySide6.QtWidgets import QFileDialog
 
         file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select File to Upload",
-            "",
-            "All Files (*)"
+            self, "Select File to Upload", "", "All Files (*)"
         )
 
         return file_path if file_path else None
 
     def show_upload_progress_dialog(self, file_path: str):
         """Show progress dialog for upload.
-        
+
         Args:
             file_path: Path of file being uploaded (for display)
-            
+
         Returns:
             QProgressDialog instance
         """
@@ -451,7 +524,7 @@ class BucketBrowserView(BaseView):
             None,  # No cancel button - upload is synchronous
             0,
             100,
-            self
+            self,
         )
         progress_dialog.setWindowTitle("Upload Progress")
         progress_dialog.setWindowModality(Qt.WindowModality.NonModal)
@@ -466,7 +539,7 @@ class BucketBrowserView(BaseView):
 
     def close_upload_progress_dialog(self, progress_dialog) -> None:
         """Close the upload progress dialog.
-        
+
         Args:
             progress_dialog: The dialog to close
         """
@@ -475,7 +548,7 @@ class BucketBrowserView(BaseView):
 
     def show_message(self, message: str) -> None:
         """Show a message in the status bar.
-        
+
         Args:
             message: Message to display
         """

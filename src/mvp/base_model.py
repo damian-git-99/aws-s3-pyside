@@ -8,6 +8,7 @@ class ModelSignals(QObject):
     data_changed = Signal()
     data_loaded = Signal()
     error_occurred = Signal(str)
+    file_deleted = Signal(str)  # Emitted when file is deleted, carries filename
 
 
 class BaseModel(ABC):
@@ -33,6 +34,10 @@ class BaseModel(ABC):
     def notify_error(self, message: str) -> None:
         """Emit signal when an error occurs."""
         self.signals.error_occurred.emit(message)
+    
+    def notify_file_deleted(self, filename: str) -> None:
+        """Emit signal when a file is deleted."""
+        self.signals.file_deleted.emit(filename)
     
     @abstractmethod
     def load_data(self) -> None:

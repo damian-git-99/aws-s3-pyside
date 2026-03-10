@@ -43,3 +43,20 @@ class S3UploadError(S3Error):
         self.filename = filename
         self.reason = reason
         super().__init__(f"Failed to upload '{filename}': {reason}")
+
+
+class S3DeleteError(S3Error):
+    """Raised when file deletion from S3 fails."""
+    
+    def __init__(self, key: str, reason: str):
+        self.key = key
+        self.reason = reason
+        super().__init__(f"Failed to delete '{key}': {reason}")
+
+
+class S3ObjectNotFoundError(S3Error):
+    """Raised when attempting to delete an object that no longer exists in S3."""
+    
+    def __init__(self, key: str):
+        self.key = key
+        super().__init__(f"Object '{key}' not found in bucket. It may have been deleted by another process.")

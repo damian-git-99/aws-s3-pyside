@@ -4,6 +4,8 @@ from random import choice, randint
 
 from src.mvp.base_model import BaseModel
 from src.models.bucket_object import BucketObject
+from src.services.s3_service import S3FileService
+from src.services.s3_errors import S3Error
 
 
 class BucketBrowserModel(BaseModel):
@@ -12,7 +14,16 @@ class BucketBrowserModel(BaseModel):
     def __init__(self):
         super().__init__()
         self._data: List[BucketObject] = []
+        self._s3_service: Optional[S3FileService] = None
         self._load_mock_data()
+    
+    def set_s3_service(self, s3_service: S3FileService) -> None:
+        """Set the S3 service for deletion operations.
+        
+        Args:
+            s3_service: The S3 file service instance
+        """
+        self._s3_service = s3_service
     
     def load_data(self) -> None:
         """Load data - for mock version, just refresh the mock data."""
@@ -129,3 +140,25 @@ class BucketBrowserModel(BaseModel):
         
         # Sort: folders first, then by name
         self._data.sort(key=lambda x: (not x.is_folder, x.name.lower()))
+    
+    def delete_file(self, key: str) -> None:
+        """Delete a file from S3 bucket.
+        
+        Args:
+            key: The S3 key (path) of the file to delete (e.g., "folder/file.txt")
+            
+        Raises:
+            Various S3Error subclasses on failure
+        """
+        if not self._s3_service:
+            raise RuntimeError("S3 service not configured. Cannot delete file.")
+        
+        try:
+            # Delete from S3
+            self._s3_service.delete_object(key)
+            # Emit success signal
+            filename = key.split('/')[-1]
+            self.notify_file_deleted(filename)
+        except S3Error as e:
+            # Emit error signal with detailed message
+            self.notify_error(str(e))

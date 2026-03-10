@@ -12,6 +12,8 @@ from src.services.s3_errors import (
     S3ConnectionError,
     S3CredentialsError,
     S3UploadError,
+    S3DeleteError,
+    S3ObjectNotFoundError,
 )
 from src.services.s3_service import S3FileService, S3ListResult
 
@@ -339,6 +341,106 @@ class TestS3FileService(unittest.TestCase):
 
         with self.assertRaises(S3CredentialsError):
             self.service.upload_fileobj_to_prefix(fake_file, key='file.txt')
+
+    def test_delete_object_success(self):
+        """Should successfully delete an object from S3."""
+        self.service.delete_object('test-file.txt')
+
+        self.mock_s3_client.delete_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='test-file.txt'
+        )
+
+    def test_delete_object_with_prefix(self):
+        """Should delete object with prefix (nested path)."""
+        self.service.delete_object('folder/subfolder/file.txt')
+
+        self.mock_s3_client.delete_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='folder/subfolder/file.txt'
+        )
+
+    def test_delete_object_access_denied_error(self):
+        """Should raise S3AccessDeniedError on 403 during delete."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': '403', 'Message': 'Access Denied'}
+        }
+        self.mock_s3_client.delete_object.side_effect = ClientError(
+            error_response, 'DeleteObject'
+        )
+
+        with self.assertRaises(S3AccessDeniedError) as context:
+            self.service.delete_object('file.txt')
+
+        self.assertIn('test-bucket', str(context.exception))
+
+    def test_delete_object_bucket_not_found_error(self):
+        """Should raise S3BucketNotFoundError when bucket doesn't exist."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'NoSuchBucket', 'Message': 'Bucket not found'}
+        }
+        self.mock_s3_client.delete_object.side_effect = ClientError(
+            error_response, 'DeleteObject'
+        )
+
+        with self.assertRaises(S3BucketNotFoundError):
+            self.service.delete_object('file.txt')
+
+    def test_delete_object_not_found_error(self):
+        """Should raise S3ObjectNotFoundError when object doesn't exist."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'NoSuchKey', 'Message': 'Object not found'}
+        }
+        self.mock_s3_client.delete_object.side_effect = ClientError(
+            error_response, 'DeleteObject'
+        )
+
+        with self.assertRaises(S3ObjectNotFoundError) as context:
+            self.service.delete_object('missing-file.txt')
+
+        self.assertIn('missing-file.txt', str(context.exception))
+
+    def test_delete_object_connection_error(self):
+        """Should raise S3ConnectionError on connection issues during delete."""
+        from botocore.exceptions import EndpointConnectionError
+
+        self.mock_s3_client.delete_object.side_effect = EndpointConnectionError(
+            endpoint_url='https://s3.amazonaws.com'
+        )
+
+        with self.assertRaises(S3ConnectionError):
+            self.service.delete_object('file.txt')
+
+    def test_delete_object_credentials_error(self):
+        """Should raise S3CredentialsError when no credentials during delete."""
+        from botocore.exceptions import NoCredentialsError
+
+        self.mock_s3_client.delete_object.side_effect = NoCredentialsError()
+
+        with self.assertRaises(S3CredentialsError):
+            self.service.delete_object('file.txt')
+
+    def test_delete_object_generic_error(self):
+        """Should raise S3DeleteError for other errors during delete."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'InternalError', 'Message': 'Internal server error'}
+        }
+        self.mock_s3_client.delete_object.side_effect = ClientError(
+            error_response, 'DeleteObject'
+        )
+
+        with self.assertRaises(S3DeleteError) as context:
+            self.service.delete_object('file.txt')
+
+        self.assertIn('file.txt', str(context.exception))
 
 
 if __name__ == '__main__':

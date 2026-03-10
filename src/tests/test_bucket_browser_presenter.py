@@ -3,6 +3,8 @@ import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+from PySide6.QtWidgets import QMessageBox
+
 from src.presenters.bucket_browser_presenter import BucketBrowserPresenter
 from src.models.bucket_browser_model import BucketBrowserModel
 from src.models.bucket_object import BucketObject
@@ -394,6 +396,64 @@ class TestBucketBrowserPresenterNavigation(unittest.TestCase):
         
         # The view should have been updated
         self.assertTrue(self.view.can_go_up())
+
+    def test_handle_delete_file_at_root(self):
+        """Test that delete handler constructs correct key at root level."""
+        # Mock the delete_file method
+        self.model.delete_file = MagicMock()
+        
+        with patch('PySide6.QtWidgets.QMessageBox.question') as mock_question:
+            # Mock user clicking "Yes" in the confirmation dialog
+            mock_question.return_value = QMessageBox.Yes
+            
+            # Act
+            self.presenter.handle_delete_file('file.txt')
+            
+            # Assert - model should be called with filename
+            self.model.delete_file.assert_called_once_with('file.txt')
+
+    def test_handle_delete_file_in_nested_folder(self):
+        """Test that delete handler constructs full S3 key with prefix."""
+        # Mock the delete_file method
+        self.model.delete_file = MagicMock()
+        
+        with patch('PySide6.QtWidgets.QMessageBox.question') as mock_question:
+            # Mock user clicking "Yes" in the confirmation dialog
+            mock_question.return_value = QMessageBox.Yes
+            
+            # Arrange
+            self.presenter._current_prefix = 'folder/subfolder/'
+            
+            # Act
+            self.presenter.handle_delete_file('file.txt')
+            
+            # Assert - model should be called with full key
+            self.model.delete_file.assert_called_once_with('folder/subfolder/file.txt')
+
+    def test_on_file_deleted_shows_message_and_refreshes(self):
+        """Test that on_file_deleted shows message and refreshes list."""
+        # Arrange
+        self.presenter._all_objects = []  # Simulate loaded objects
+        self.mock_s3_service.list_objects.return_value = S3ListResult(
+            objects=[],
+            continuation_token=None,
+            is_truncated=False
+        )
+        
+        # Act
+        self.presenter._on_file_deleted('deleted-file.txt')
+        
+        # Assert - should show message
+        self.assertTrue(any('deleted-file.txt' in str(call) for call in self.view.messages))
+
+    def test_on_model_error_shows_error_dialog(self):
+        """Test that on_model_error displays error message."""
+        # Act
+        error_msg = "Access denied to bucket"
+        self.presenter._on_model_error(error_msg)
+        
+        # Assert - error should be in view errors
+        self.assertTrue(any(error_msg in str(e) for e in self.view.errors))
 
 
 if __name__ == '__main__':

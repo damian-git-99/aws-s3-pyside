@@ -19,6 +19,8 @@ class MockView(BaseView):
         self._error_message: Optional[str] = None
         self._loading_shown: bool = False
         self._setup_ui_called: bool = False
+        self.messages: List[str] = []
+        self.errors: List[str] = []
     
     def setup_ui(self) -> None:
         """Mock setup_ui."""
@@ -27,10 +29,6 @@ class MockView(BaseView):
     def display_data(self, data: List[IBucketObject]) -> None:
         """Mock display_data - stores the data for verification."""
         self._displayed_data = data
-    
-    def show_error(self, message: str) -> None:
-        """Mock show_error - stores the error message."""
-        self._error_message = message
     
     def show_loading(self, show: bool = True) -> None:
         """Mock show_loading."""
@@ -56,6 +54,7 @@ class MockView(BaseView):
     def show_error_with_retry(self, message: str, on_retry: callable) -> None:
         """Mock show_error_with_retry - stores the error message and callback."""
         self._error_message = message
+        self.errors.append(message)
         self._retry_callback = on_retry
 
     def show_load_more_button(self, show: bool = True) -> None:
@@ -119,6 +118,7 @@ class MockView(BaseView):
     def show_message(self, message: str) -> None:
         """Mock show_message."""
         self._message = message
+        self.messages.append(message)
 
     def set_upload_dialog_result(self, file_path: Optional[str]) -> None:
         """Set the result to return from show_upload_dialog."""
@@ -131,6 +131,11 @@ class MockView(BaseView):
     def get_message(self) -> Optional[str]:
         """Get the message that was shown."""
         return getattr(self, '_message', None)
+
+    def show_error(self, message: str) -> None:
+        """Mock show_error - stores the error message."""
+        self._error_message = message
+        self.errors.append(message)
 
 
 def create_mock_view() -> MockView:
