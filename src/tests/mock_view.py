@@ -78,6 +78,30 @@ class MockView(BaseView):
         """Check if empty state was shown."""
         return getattr(self, '_empty_state_shown', False)
 
+    def update_breadcrumb(self, path_segments) -> None:
+        """Mock update_breadcrumb."""
+        self._breadcrumb_segments = path_segments
+
+    def enable_navigation_buttons(self, can_go_up: bool = True) -> None:
+        """Mock enable_navigation_buttons."""
+        self._can_go_up = can_go_up
+
+    def get_breadcrumb_segments(self):
+        """Get the breadcrumb segments that were set."""
+        return getattr(self, '_breadcrumb_segments', None)
+
+    def can_go_up(self) -> bool:
+        """Check if up navigation was enabled."""
+        return getattr(self, '_can_go_up', False)
+
+    def setWindowTitle(self, title: str) -> None:
+        """Mock setWindowTitle."""
+        self._window_title = title
+
+    def get_window_title(self) -> str:
+        """Get the window title."""
+        return getattr(self, '_window_title', '')
+
 
 def create_mock_view() -> MockView:
     """Factory function to create a MockView instance."""

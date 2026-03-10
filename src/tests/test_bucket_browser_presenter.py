@@ -19,6 +19,7 @@ class TestBucketBrowserPresenter(unittest.TestCase):
         self.model = BucketBrowserModel()
         self.view = MockView()
         self.mock_s3_service = MagicMock(spec=S3FileService)
+        self.mock_s3_service.bucket_name = "test-bucket"
         self.presenter = BucketBrowserPresenter(
             self.model, self.view, s3_service=self.mock_s3_service
         )
@@ -231,6 +232,168 @@ class TestBucketBrowserPresenterFallback(unittest.TestCase):
         displayed_data = self.view.get_displayed_data()
         self.assertGreater(len(displayed_data), 0)
         self.assertFalse(self.view.was_loading_shown())
+
+
+class TestBucketBrowserPresenterNavigation(unittest.TestCase):
+    """Test cases for navigation functionality."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.model = BucketBrowserModel()
+        self.view = MockView()
+        self.mock_s3_service = MagicMock(spec=S3FileService)
+        self.mock_s3_service.bucket_name = "test-bucket"
+        self.presenter = BucketBrowserPresenter(
+            self.model, self.view, s3_service=self.mock_s3_service
+        )
+        # Initialize presenter to set up state
+        self.mock_s3_service.list_objects.return_value = S3ListResult(
+            objects=[],
+            continuation_token=None,
+            is_truncated=False
+        )
+        self.presenter.initialize()
+
+    def test_navigate_to_folder_changes_prefix(self):
+        """Test that navigate_to_folder updates the current prefix."""
+        # Arrange
+        self.mock_s3_service.list_objects.reset_mock()
+        
+        # Act
+        self.presenter.navigate_to_folder("my-folder")
+        
+        # Assert
+        self.assertEqual(self.presenter._current_prefix, "my-folder/")
+        self.mock_s3_service.list_objects.assert_called_once()
+
+    def test_navigate_to_folder_calls_s3_service(self):
+        """Test that navigate_to_folder loads folder contents."""
+        # Arrange
+        mock_objects = [
+            BucketObject(name='file1.txt', size=100, last_modified=datetime.now(), storage_class='STANDARD'),
+        ]
+        self.mock_s3_service.list_objects.return_value = S3ListResult(
+            objects=mock_objects,
+            continuation_token=None,
+            is_truncated=False
+        )
+        
+        # Act
+        self.presenter.navigate_to_folder("my-folder")
+        
+        # Assert
+        call_args = self.mock_s3_service.list_objects.call_args
+        self.assertEqual(call_args[1]['prefix'], "my-folder/")
+
+    def test_navigate_up_from_nested_folder(self):
+        """Test that navigate_up goes to parent directory."""
+        # Arrange
+        self.presenter.navigate_to_folder("level1")
+        self.presenter.navigate_to_folder("level2")
+        self.mock_s3_service.list_objects.reset_mock()
+        
+        # Act
+        self.presenter.navigate_up()
+        
+        # Assert
+        self.assertEqual(self.presenter._current_prefix, "level1/")
+
+    def test_navigate_up_from_first_level(self):
+        """Test that navigate_up goes to root from first level."""
+        # Arrange
+        self.presenter.navigate_to_folder("my-folder")
+        self.mock_s3_service.list_objects.reset_mock()
+        
+        # Act
+        self.presenter.navigate_up()
+        
+        # Assert
+        self.assertIsNone(self.presenter._current_prefix)
+
+    def test_navigate_up_at_root_does_nothing(self):
+        """Test that navigate_up does nothing when at root."""
+        # Act
+        self.presenter.navigate_up()
+        
+        # Assert
+        self.assertIsNone(self.presenter._current_prefix)
+        # Should call S3 service to refresh (even at root)
+        self.mock_s3_service.list_objects.assert_called_once()
+
+    def test_navigate_to_root_clears_prefix(self):
+        """Test that navigate_to_root clears the prefix."""
+        # Arrange
+        self.presenter.navigate_to_folder("some-folder")
+        
+        # Act
+        self.presenter.navigate_to_root()
+        
+        # Assert
+        self.assertIsNone(self.presenter._current_prefix)
+
+    def test_get_breadcrumb_at_root(self):
+        """Test that breadcrumb at root shows only bucket name."""
+        # Act
+        breadcrumb = self.presenter.get_breadcrumb()
+        
+        # Assert
+        self.assertEqual(len(breadcrumb), 1)
+        self.assertEqual(breadcrumb[0][0], "test-bucket")
+        self.assertIsNone(breadcrumb[0][1])
+
+    def test_get_breadcrumb_at_first_level(self):
+        """Test that breadcrumb at first level shows bucket and folder."""
+        # Act
+        self.presenter.navigate_to_folder("my-folder")
+        breadcrumb = self.presenter.get_breadcrumb()
+        
+        # Assert
+        self.assertEqual(len(breadcrumb), 2)
+        self.assertEqual(breadcrumb[0][0], "test-bucket")
+        self.assertEqual(breadcrumb[1][0], "my-folder")
+        self.assertEqual(breadcrumb[1][1], "my-folder/")
+
+    def test_get_breadcrumb_at_nested_level(self):
+        """Test that breadcrumb at nested level shows full path."""
+        # Act
+        self.presenter.navigate_to_folder("level1")
+        self.presenter.navigate_to_folder("level2")
+        breadcrumb = self.presenter.get_breadcrumb()
+        
+        # Assert
+        self.assertEqual(len(breadcrumb), 3)
+        self.assertEqual(breadcrumb[0][0], "test-bucket")
+        self.assertEqual(breadcrumb[1][0], "level1")
+        self.assertEqual(breadcrumb[2][0], "level2")
+        self.assertEqual(breadcrumb[1][1], "level1/")
+        self.assertEqual(breadcrumb[2][1], "level1/level2/")
+
+    def test_on_item_double_clicked_navigates_to_folder(self):
+        """Test that double-click on folder navigates into it."""
+        # Act
+        self.presenter.on_item_double_clicked("my-folder", is_folder=True)
+        
+        # Assert
+        self.assertEqual(self.presenter._current_prefix, "my-folder/")
+
+    def test_on_item_double_clicked_ignores_file(self):
+        """Test that double-click on file does nothing."""
+        # Act
+        self.presenter.on_item_double_clicked("my-file.txt", is_folder=False)
+        
+        # Assert
+        self.assertIsNone(self.presenter._current_prefix)
+
+    def test_navigation_enables_up_button(self):
+        """Test that navigation enables the up button."""
+        # Initially at root - up should be disabled
+        self.assertFalse(self.view.can_go_up())
+        
+        # Navigate to folder - up should be enabled
+        self.presenter.navigate_to_folder("my-folder")
+        
+        # The view should have been updated
+        self.assertTrue(self.view.can_go_up())
 
 
 if __name__ == '__main__':

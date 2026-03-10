@@ -1,9 +1,10 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QToolBar, QPushButton, QLabel, QMenuBar, QMenu, QMainWindow
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
 
 from src.mvp.base_view import BaseView
 from src.models.bucket_object import BucketObject
@@ -22,6 +23,10 @@ class BucketBrowserView(BaseView):
         self._toolbar: Optional[QToolBar] = None
         self._status_label: Optional[QLabel] = None
         self._menu_bar: Optional[QMenuBar] = None
+        self._home_btn: Optional[QPushButton] = None
+        self._up_btn: Optional[QPushButton] = None
+        self._breadcrumb_widget: Optional[QWidget] = None
+        self._breadcrumb_actions: List[QAction] = []
         self.setup_ui()
     
     def setup_ui(self) -> None:
@@ -59,6 +64,18 @@ class BucketBrowserView(BaseView):
         """Setup the toolbar with action buttons."""
         self._toolbar = QToolBar()
         
+        # Home button
+        self._home_btn = QPushButton("Home")
+        self._home_btn.setObjectName("home_btn")
+        self._home_btn.clicked.connect(self._on_home_clicked)
+        self._toolbar.addWidget(self._home_btn)
+        
+        # Up button
+        self._up_btn = QPushButton("Up")
+        self._up_btn.setObjectName("up_btn")
+        self._up_btn.clicked.connect(self._on_up_clicked)
+        self._toolbar.addWidget(self._up_btn)
+        
         # Refresh button
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setObjectName("refresh_btn")
@@ -75,6 +92,16 @@ class BucketBrowserView(BaseView):
         upload_btn.setObjectName("upload_btn")
         upload_btn.clicked.connect(self._on_upload_clicked)
         self._toolbar.addWidget(upload_btn)
+        
+        # Breadcrumb area (stretch)
+        self._breadcrumb_widget = QWidget()
+        self._breadcrumb_layout = QHBoxLayout(self._breadcrumb_widget)
+        self._breadcrumb_layout.setContentsMargins(5, 0, 5, 0)
+        self._breadcrumb_layout.addStretch()
+        self._toolbar.addWidget(self._breadcrumb_widget)
+        
+        # Disable navigation buttons initially (at root)
+        self.enable_navigation_buttons(can_go_up=False)
     
     def _setup_menu_bar(self) -> None:
         """Setup the menu bar."""
@@ -115,6 +142,9 @@ class BucketBrowserView(BaseView):
         
         # Hide vertical header (row numbers)
         self._table.verticalHeader().setVisible(False)
+        
+        # Connect double-click signal
+        self._table.cellDoubleClicked.connect(self._on_table_double_clicked)
     
     def display_data(self, data: List[BucketObject]) -> None:
         """Display bucket objects in the table.
@@ -122,6 +152,7 @@ class BucketBrowserView(BaseView):
         Args:
             data: List of BucketObject instances to display
         """
+        self._current_data = data
         # Show empty state message if no data
         if not data:
             self._show_empty_state(True)
@@ -275,3 +306,111 @@ class BucketBrowserView(BaseView):
         if hasattr(self, '_empty_state_label'):
             self._empty_state_label.setVisible(show)
             self._table.setVisible(not show)
+
+    def _on_table_double_clicked(self, row: int, col: int) -> None:
+        """Handle double-click on table cell.
+        
+        Args:
+            row: Row that was clicked
+            col: Column that was clicked
+        """
+        if not self._presenter or not self._table:
+            return
+        
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return
+        
+        object_name = name_item.text()
+        
+        is_folder = False
+        for obj in getattr(self, '_current_data', []):
+            if obj.name == object_name:
+                is_folder = obj.is_folder
+                break
+        
+        self._presenter.on_item_double_clicked(object_name, is_folder)
+
+    def _on_home_clicked(self) -> None:
+        """Handle Home button click."""
+        if self._presenter:
+            self._presenter.navigate_to_root()
+
+    def _on_up_clicked(self) -> None:
+        """Handle Up button click."""
+        if self._presenter:
+            self._presenter.navigate_up()
+
+    def _on_breadcrumb_clicked(self, prefix: Optional[str]) -> None:
+        """Handle breadcrumb segment click.
+        
+        Args:
+            prefix: The prefix to navigate to (None for root)
+        """
+        if self._presenter:
+            self._presenter.navigate_to_prefix(prefix)
+
+    def update_breadcrumb(self, path_segments: List[Tuple[str, Optional[str]]]) -> None:
+        """Update the breadcrumb display.
+        
+        Args:
+            path_segments: List of tuples (display_name, prefix) for each segment
+        """
+        if not hasattr(self, '_breadcrumb_layout'):
+            return
+        
+        while self._breadcrumb_layout.count() > 1:
+            item = self._breadcrumb_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        self._breadcrumb_actions.clear()
+        
+        for i, (name, prefix) in enumerate(path_segments):
+            if i > 0:
+                separator = QLabel(">")
+                separator.setStyleSheet("color: #999999; padding: 0 2px;")
+                self._breadcrumb_layout.insertWidget(self._breadcrumb_layout.count() - 1, separator)
+            
+            btn = QPushButton(name)
+            btn.setFlat(True)
+            btn.setObjectName(f"breadcrumb_{i}")
+            btn.setStyleSheet("QPushButton { padding: 2px 4px; }")
+            
+            if i < len(path_segments) - 1:
+                btn.clicked.connect(lambda checked, p=prefix: self._on_breadcrumb_clicked(p))
+                btn.setStyleSheet("""
+                    QPushButton {
+                        color: #0066cc;
+                        text-decoration: underline;
+                        background: none;
+                        border: none;
+                        padding: 2px 4px;
+                    }
+                    QPushButton:hover {
+                        color: #0033aa;
+                    }
+                """)
+            else:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        color: #333333;
+                        font-weight: bold;
+                        background: none;
+                        border: none;
+                        padding: 2px 4px;
+                    }
+                """)
+            
+            self._breadcrumb_layout.insertWidget(self._breadcrumb_layout.count() - 1, btn)
+
+    def enable_navigation_buttons(self, can_go_up: bool) -> None:
+        """Enable or disable navigation buttons.
+        
+        Args:
+            can_go_up: Whether the Up button should be enabled
+        """
+        if self._home_btn:
+            self._home_btn.setEnabled(can_go_up)
+        if self._up_btn:
+            self._up_btn.setEnabled(can_go_up)
