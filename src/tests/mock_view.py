@@ -102,6 +102,36 @@ class MockView(BaseView):
         """Get the window title."""
         return getattr(self, '_window_title', '')
 
+    def show_upload_dialog(self) -> Optional[str]:
+        """Mock show_upload_dialog."""
+        return getattr(self, '_upload_dialog_result', None)
+
+    def show_upload_progress_dialog(self, file_path: str):
+        """Mock show_upload_progress_dialog."""
+        mock_dialog = MagicMock()
+        self._progress_dialog = mock_dialog
+        return mock_dialog
+
+    def close_upload_progress_dialog(self, progress_dialog) -> None:
+        """Mock close_upload_progress_dialog."""
+        self._progress_dialog_closed = True
+
+    def show_message(self, message: str) -> None:
+        """Mock show_message."""
+        self._message = message
+
+    def set_upload_dialog_result(self, file_path: Optional[str]) -> None:
+        """Set the result to return from show_upload_dialog."""
+        self._upload_dialog_result = file_path
+
+    def was_progress_dialog_closed(self) -> bool:
+        """Check if progress dialog was closed."""
+        return getattr(self, '_progress_dialog_closed', False)
+
+    def get_message(self) -> Optional[str]:
+        """Get the message that was shown."""
+        return getattr(self, '_message', None)
+
 
 def create_mock_view() -> MockView:
     """Factory function to create a MockView instance."""

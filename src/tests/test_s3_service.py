@@ -1,8 +1,9 @@
 """Tests for S3FileService."""
 
+import io
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.models.bucket_object import BucketObject
 from src.services.s3_errors import (
@@ -10,6 +11,7 @@ from src.services.s3_errors import (
     S3BucketNotFoundError,
     S3ConnectionError,
     S3CredentialsError,
+    S3UploadError,
 )
 from src.services.s3_service import S3FileService, S3ListResult
 
@@ -239,6 +241,104 @@ class TestS3FileService(unittest.TestCase):
 
         with self.assertRaises(S3ConnectionError):
             self.service.list_objects()
+
+    def test_upload_fileobj_to_root(self):
+        """Should upload file-like object to root of bucket."""
+        fake_file = io.BytesIO(b'test content')
+        setattr(fake_file, 'name', '/path/to/file.txt')
+
+        self.service.upload_fileobj_to_prefix(fake_file)
+
+        self.mock_s3_client.upload_fileobj.assert_called_once()
+        call_args = self.mock_s3_client.upload_fileobj.call_args
+        self.assertEqual(call_args[0][0], fake_file)
+        self.assertEqual(call_args[0][1], 'test-bucket')
+        self.assertEqual(call_args[0][2], 'file.txt')
+
+    def test_upload_fileobj_with_prefix(self):
+        """Should upload file-like object to specified prefix."""
+        fake_file = io.BytesIO(b'test content')
+        
+        self.service.upload_fileobj_to_prefix(fake_file, prefix='uploads/', key='test.txt')
+
+        call_args = self.mock_s3_client.upload_fileobj.call_args
+        self.assertEqual(call_args[0][2], 'uploads/test.txt')
+
+    def test_upload_fileobj_to_prefix_with_name_attr(self):
+        """Should extract filename from file_obj.name attribute."""
+        fake_file = io.BytesIO(b'test content')
+        setattr(fake_file, 'name', '/path/to/important.doc')
+
+        self.service.upload_fileobj_to_prefix(fake_file, prefix='docs/')
+
+        call_args = self.mock_s3_client.upload_fileobj.call_args
+        self.assertEqual(call_args[0][2], 'docs/important.doc')
+
+    def test_upload_fileobj_no_name_attr_uses_default(self):
+        """Should use default filename when file_obj has no name attribute."""
+        fake_file = io.BytesIO(b'test content')
+        # No name attribute set
+
+        self.service.upload_fileobj_to_prefix(fake_file)
+
+        call_args = self.mock_s3_client.upload_fileobj.call_args
+        self.assertEqual(call_args[0][2], 'uploaded_file')
+
+    def test_upload_fileobj_access_denied_error(self):
+        """Should raise S3AccessDeniedError on 403 during upload."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': '403', 'Message': 'Access Denied'}
+        }
+        self.mock_s3_client.upload_fileobj.side_effect = ClientError(
+            error_response, 'PutObject'
+        )
+
+        fake_file = io.BytesIO(b'test content')
+        
+        with self.assertRaises(S3AccessDeniedError):
+            self.service.upload_fileobj_to_prefix(fake_file, key='file.txt')
+
+    def test_upload_fileobj_bucket_not_found_error(self):
+        """Should raise S3BucketNotFoundError when bucket doesn't exist."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'NoSuchBucket', 'Message': 'Bucket not found'}
+        }
+        self.mock_s3_client.upload_fileobj.side_effect = ClientError(
+            error_response, 'PutObject'
+        )
+
+        fake_file = io.BytesIO(b'test content')
+
+        with self.assertRaises(S3BucketNotFoundError):
+            self.service.upload_fileobj_to_prefix(fake_file, key='file.txt')
+
+    def test_upload_fileobj_connection_error(self):
+        """Should raise S3ConnectionError on connection issues during upload."""
+        from botocore.exceptions import EndpointConnectionError
+
+        self.mock_s3_client.upload_fileobj.side_effect = EndpointConnectionError(
+            endpoint_url='https://s3.amazonaws.com'
+        )
+
+        fake_file = io.BytesIO(b'test content')
+
+        with self.assertRaises(S3ConnectionError):
+            self.service.upload_fileobj_to_prefix(fake_file, key='file.txt')
+
+    def test_upload_fileobj_credentials_error(self):
+        """Should raise S3CredentialsError when no credentials during upload."""
+        from botocore.exceptions import NoCredentialsError
+
+        self.mock_s3_client.upload_fileobj.side_effect = NoCredentialsError()
+
+        fake_file = io.BytesIO(b'test content')
+
+        with self.assertRaises(S3CredentialsError):
+            self.service.upload_fileobj_to_prefix(fake_file, key='file.txt')
 
 
 if __name__ == '__main__':
