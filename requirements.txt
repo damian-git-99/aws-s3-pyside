@@ -6,3 +6,6 @@ boto3>=1.34.0
 
 # Configuration
 python-dotenv>=1.0.0
+
+# Development dependencies
+pyinstaller>=6.0.0

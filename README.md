@@ -65,6 +65,42 @@ cp .env.example .env
 uv run python -m src.main
 ```
 
+## Building the Executable
+
+To create a standalone executable for distribution:
+
+```bash
+# Install dev dependencies (includes PyInstaller)
+uv pip install -r requirements.txt
+
+# Build the executable
+uv run python build.py
+
+# Or with optional output directory
+uv run python build.py --distpath ./release
+```
+
+The executable will be created in `dist/s3-bucket-browser` (or your custom `--distpath`).
+
+### Build Output
+
+- **Windows**: `dist/s3-bucket-browser.exe`
+- **Linux**: `dist/s3-bucket-browser`
+- **macOS**: `dist/s3-bucket-browser.app`
+
+The executable is a single file (~91MB) that includes Python and all dependencies.
+
+### Troubleshooting
+
+**Platform plugin not found**
+If you get an error about missing Qt platform plugins, ensure PySide6 plugins are properly bundled. The spec file includes hooks to collect these automatically.
+
+**Antivirus false positives**
+Some antivirus software may flag PyInstaller executables. This is a known issue - code signing can help reduce false positives.
+
+**Large file size**
+The executable bundles Python and PySide6, resulting in ~91MB. Use UPX compression to reduce size if needed (enabled by default).
+
 ## Running Tests
 
 ```bash
