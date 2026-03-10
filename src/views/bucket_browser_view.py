@@ -414,3 +414,71 @@ class BucketBrowserView(BaseView):
             self._home_btn.setEnabled(can_go_up)
         if self._up_btn:
             self._up_btn.setEnabled(can_go_up)
+
+    def show_upload_dialog(self) -> Optional[str]:
+        """Show file picker dialog for upload.
+        
+        Returns:
+            File path selected, or None if cancelled
+        """
+        from PySide6.QtWidgets import QFileDialog
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select File to Upload",
+            "",
+            "All Files (*)"
+        )
+
+        return file_path if file_path else None
+
+    def show_upload_progress_dialog(self, file_path: str):
+        """Show progress dialog for upload.
+        
+        Args:
+            file_path: Path of file being uploaded (for display)
+            
+        Returns:
+            QProgressDialog instance
+        """
+        from PySide6.QtWidgets import QProgressDialog
+        import os
+
+        filename = os.path.basename(file_path)
+
+        progress_dialog = QProgressDialog(
+            f"Uploading {filename}...",
+            None,  # No cancel button - upload is synchronous
+            0,
+            100,
+            self
+        )
+        progress_dialog.setWindowTitle("Upload Progress")
+        progress_dialog.setWindowModality(Qt.WindowModality.NonModal)
+        progress_dialog.setAutoClose(False)
+        progress_dialog.setAutoReset(False)
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setValue(0)
+        progress_dialog.show()
+        progress_dialog.raise_()
+
+        return progress_dialog
+
+    def close_upload_progress_dialog(self, progress_dialog) -> None:
+        """Close the upload progress dialog.
+        
+        Args:
+            progress_dialog: The dialog to close
+        """
+        if progress_dialog:
+            progress_dialog.close()
+
+    def show_message(self, message: str) -> None:
+        """Show a message in the status bar.
+        
+        Args:
+            message: Message to display
+        """
+        if self._status_label:
+            self._status_label.setText(message)
+            self._status_label.setStyleSheet("color: green;")
