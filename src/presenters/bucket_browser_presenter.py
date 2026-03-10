@@ -1,4 +1,8 @@
 from typing import List, Optional, Tuple
+import os
+import logging
+
+from PySide6.QtCore import QThread, Signal
 
 from src.mvp.base_presenter import BasePresenter
 from src.models.bucket_browser_model import BucketBrowserModel
@@ -11,6 +15,76 @@ from src.services.s3_errors import (
     S3ConnectionError,
     S3CredentialsError,
 )
+
+logger = logging.getLogger(__name__)
+
+
+class ProgressFileReader:
+    """File wrapper that tracks read progress and emits updates via Qt signal."""
+    
+    def __init__(self, file_path: str, progress_signal):
+        self._file = open(file_path, 'rb')
+        self._size = os.path.getsize(file_path)
+        self._read = 0
+        self._progress_signal = progress_signal
+        self._last_percentage = -1
+        self.name = os.path.basename(file_path)
+    
+    def read(self, size=-1):
+        data = self._file.read(size)
+        self._read += len(data)
+        percentage = int((self._read / self._size) * 100)
+        if percentage != self._last_percentage:
+            self._last_percentage = percentage
+            self._progress_signal.emit(percentage)
+        return data
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, *args):
+        self._file.close()
+
+
+class UploadWorker(QThread):
+    """Worker thread for uploading files to S3.
+    
+    Signals:
+        progress: Emitted with percentage (0-100) during upload
+        finished: Emitted when upload completes successfully
+        error: Emitted when upload fails with error message
+    """
+
+    progress = Signal(int)
+    finished = Signal()
+    error = Signal(str)
+
+    def __init__(
+        self, s3_service: S3FileService, file_path: str, prefix: Optional[str] = None
+    ):
+        super().__init__()
+        self._s3_service = s3_service
+        self._file_path = file_path
+        self._prefix = prefix
+        self._cancelled = False
+
+    def run(self) -> None:
+        """Execute the upload operation in background thread."""
+        try:
+            with ProgressFileReader(self._file_path, self.progress) as f:
+                self._s3_service.upload_fileobj_to_prefix(
+                    file_obj=f,
+                    prefix=self._prefix
+                )
+            if not self._cancelled:
+                self.finished.emit()
+        except Exception as e:
+            if not self._cancelled:
+                self.error.emit(str(e))
+
+    def cancel(self) -> None:
+        """Request cancellation of the upload."""
+        self._cancelled = True
 
 
 class BucketBrowserPresenter(BasePresenter):
@@ -29,7 +103,7 @@ class BucketBrowserPresenter(BasePresenter):
         self,
         model: BucketBrowserModel,
         view: BucketBrowserView,
-        s3_service: Optional[S3FileService] = None
+        s3_service: Optional[S3FileService] = None,
     ):
         super().__init__(model, view)
         self._model: BucketBrowserModel = model
@@ -40,6 +114,7 @@ class BucketBrowserPresenter(BasePresenter):
         self._all_objects: List[BucketObject] = []
         self._current_prefix: Optional[str] = None
         self._bucket_name: str = ""
+        self._upload_worker: Optional[UploadWorker] = None
 
     def initialize(self) -> None:
         """Initialize the presenter and load initial data."""
@@ -51,7 +126,7 @@ class BucketBrowserPresenter(BasePresenter):
 
     def navigate_to_folder(self, folder_name: str) -> None:
         """Navigate into a folder.
-        
+
         Args:
             folder_name: Name of the folder to navigate into
         """
@@ -63,7 +138,7 @@ class BucketBrowserPresenter(BasePresenter):
 
     def navigate_to_prefix(self, prefix: Optional[str]) -> None:
         """Navigate to a specific prefix (folder path).
-        
+
         Args:
             prefix: The prefix to navigate to (None for root)
         """
@@ -77,13 +152,13 @@ class BucketBrowserPresenter(BasePresenter):
         """Navigate to the parent directory."""
         if not self._current_prefix:
             return
-        
-        prefix_without_trailing = self._current_prefix.rstrip('/')
-        if '/' not in prefix_without_trailing:
+
+        prefix_without_trailing = self._current_prefix.rstrip("/")
+        if "/" not in prefix_without_trailing:
             if self._current_prefix:
                 self.navigate_to_prefix(None)
         else:
-            parent_prefix = prefix_without_trailing.rsplit('/', 1)[0] + "/"
+            parent_prefix = prefix_without_trailing.rsplit("/", 1)[0] + "/"
             self.navigate_to_prefix(parent_prefix)
 
     def navigate_to_root(self) -> None:
@@ -92,28 +167,28 @@ class BucketBrowserPresenter(BasePresenter):
 
     def get_breadcrumb(self) -> List[Tuple[str, Optional[str]]]:
         """Get the breadcrumb path segments.
-        
+
         Returns:
             List of tuples (display_name, prefix) for each segment
         """
         segments: List[Tuple[str, Optional[str]]] = []
-        
+
         segments.append((self._bucket_name, None))
-        
+
         if self._current_prefix:
-            prefix_without_trailing = self._current_prefix.rstrip('/')
-            parts = prefix_without_trailing.split('/')
-            
+            prefix_without_trailing = self._current_prefix.rstrip("/")
+            parts = prefix_without_trailing.split("/")
+
             current_path = ""
             for part in parts:
                 current_path += part + "/"
                 segments.append((part, current_path))
-        
+
         return segments
 
     def on_item_double_clicked(self, object_name: str, is_folder: bool) -> None:
         """Handle double-click on a table item.
-        
+
         Args:
             object_name: Name of the clicked object
             is_folder: Whether the object is a folder
@@ -125,10 +200,10 @@ class BucketBrowserPresenter(BasePresenter):
         """Update the view with navigation UI elements."""
         breadcrumb = self.get_breadcrumb()
         self._view.update_breadcrumb(breadcrumb)
-        
+
         can_go_up = self._current_prefix is not None
         self._view.enable_navigation_buttons(can_go_up=can_go_up)
-        
+
         if self._current_prefix:
             path = "/" + self._current_prefix
             self._view.setWindowTitle(f"Bucket Browser - {self._bucket_name}{path}")
@@ -159,7 +234,7 @@ class BucketBrowserPresenter(BasePresenter):
         try:
             result = self._s3_service.list_objects(
                 prefix=self._current_prefix,
-                continuation_token=self._continuation_token if append else None
+                continuation_token=self._continuation_token if append else None,
             )
 
             if append:
@@ -176,28 +251,23 @@ class BucketBrowserPresenter(BasePresenter):
 
         except S3AccessDeniedError as e:
             self._view.show_error_with_retry(
-                f"Access Denied: {e}",
-                on_retry=self._load_bucket_contents
+                f"Access Denied: {e}", on_retry=self._load_bucket_contents
             )
         except S3BucketNotFoundError as e:
             self._view.show_error_with_retry(
-                f"Bucket Not Found: {e}",
-                on_retry=self._load_bucket_contents
+                f"Bucket Not Found: {e}", on_retry=self._load_bucket_contents
             )
         except S3CredentialsError as e:
             self._view.show_error_with_retry(
-                f"Invalid Credentials: {e}",
-                on_retry=self._load_bucket_contents
+                f"Invalid Credentials: {e}", on_retry=self._load_bucket_contents
             )
         except S3ConnectionError as e:
             self._view.show_error_with_retry(
-                f"Connection Error: {e}",
-                on_retry=self._load_bucket_contents
+                f"Connection Error: {e}", on_retry=self._load_bucket_contents
             )
         except Exception as e:
             self._view.show_error_with_retry(
-                f"Unexpected Error: {e}",
-                on_retry=self._load_bucket_contents
+                f"Unexpected Error: {e}", on_retry=self._load_bucket_contents
             )
         finally:
             self._view.show_loading(False)
@@ -221,6 +291,53 @@ class BucketBrowserPresenter(BasePresenter):
 
     def on_upload_clicked(self) -> None:
         """Handle upload button click."""
-        # Placeholder - no functionality for now
-        # This will be implemented when upload feature is added
-        pass
+        if not self._s3_service:
+            self._view.show_error("Upload not available in mock mode")
+            return
+
+        file_path = self._view.show_upload_dialog()
+        if not file_path:
+            return
+
+        # Cancel any existing upload
+        if self._upload_worker and self._upload_worker.isRunning():
+            self._upload_worker.cancel()
+            self._upload_worker.wait()
+
+        # Create progress dialog
+        progress_dialog = self._view.show_upload_progress_dialog(file_path)
+
+        # Create and configure worker
+        self._upload_worker = UploadWorker(
+            self._s3_service, file_path, self._current_prefix
+        )
+
+        # Connect signals - Qt automatically queues these to main thread
+        self._upload_worker.progress.connect(progress_dialog.setValue)
+        self._upload_worker.finished.connect(
+            lambda: self._on_upload_finished(progress_dialog)
+        )
+        self._upload_worker.error.connect(
+            lambda err: self._on_upload_error(err, progress_dialog)
+        )
+        progress_dialog.canceled.connect(self._upload_worker.cancel)
+
+        # Start upload
+        self._upload_worker.start()
+
+    def _on_upload_finished(self, progress_dialog) -> None:
+        """Handle successful upload completion."""
+        self._view.close_upload_progress_dialog(progress_dialog)
+        self._view.show_message("Upload completed successfully")
+        self.on_refresh_clicked()
+        if self._upload_worker:
+            self._upload_worker = None
+
+    def _on_upload_error(self, error_message: str, progress_dialog) -> None:
+        """Handle upload error."""
+        self._view.close_upload_progress_dialog(progress_dialog)
+        self._view.show_error_with_retry(
+            f"Upload failed: {error_message}", on_retry=self.on_upload_clicked
+        )
+        if self._upload_worker:
+            self._upload_worker = None
