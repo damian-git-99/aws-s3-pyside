@@ -60,3 +60,12 @@ class S3ObjectNotFoundError(S3Error):
     def __init__(self, key: str):
         self.key = key
         super().__init__(f"Object '{key}' not found in bucket. It may have been deleted by another process.")
+
+
+class S3CreateFolderError(S3Error):
+    """Raised when folder creation in S3 fails."""
+    
+    def __init__(self, folder_name: str, reason: str):
+        self.folder_name = folder_name
+        self.reason = reason
+        super().__init__(f"Failed to create folder '{folder_name}': {reason}")

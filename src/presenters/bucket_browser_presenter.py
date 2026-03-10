@@ -134,6 +134,8 @@ class BucketBrowserPresenter(BasePresenter):
         # Connect model signals
         self._model.signals.file_deleted.connect(self._on_file_deleted)
         self._model.signals.error_occurred.connect(self._on_model_error)
+        self._model.signals.folder_created.connect(self._on_folder_created)
+        self._model.signals.folder_creation_error.connect(self._on_folder_creation_error)
         
         logger.debug("Initialize: loading bucket contents")
         self._load_bucket_contents()
@@ -413,6 +415,41 @@ class BucketBrowserPresenter(BasePresenter):
         self._view.show_message(f"File '{filename}' deleted successfully")
         # Refresh the file list to show current state
         self.on_refresh_clicked()
+
+    def on_create_folder_clicked(self) -> None:
+        """Handle Create Folder button click."""
+        if not self._s3_service:
+            self._view.show_error("Create folder not available in mock mode")
+            return
+        
+        # Show dialog and get folder name
+        folder_name = self._view.show_create_folder_dialog()
+        if not folder_name:
+            return  # User cancelled
+        
+        # Create folder via model
+        try:
+            self._model.create_folder(self._current_prefix, folder_name)
+        except Exception as e:
+            self._view.show_error(f"Error creating folder: {str(e)}")
+    
+    def _on_folder_created(self, folder_name: str) -> None:
+        """Handle successful folder creation from model.
+        
+        Args:
+            folder_name: Name of the created folder
+        """
+        self._view.show_message(f"Folder '{folder_name}' created successfully")
+        # Refresh the file list to show new folder
+        self.on_refresh_clicked()
+    
+    def _on_folder_creation_error(self, error_message: str) -> None:
+        """Handle folder creation error from model.
+        
+        Args:
+            error_message: Error description
+        """
+        self._view.show_error(error_message)
 
     def _on_model_error(self, error_message: str) -> None:
         """Handle error signal from model.

@@ -14,6 +14,7 @@ from src.services.s3_errors import (
     S3UploadError,
     S3DeleteError,
     S3ObjectNotFoundError,
+    S3CreateFolderError,
 )
 from src.services.s3_service import S3FileService, S3ListResult
 
@@ -441,6 +442,118 @@ class TestS3FileService(unittest.TestCase):
             self.service.delete_object('file.txt')
 
         self.assertIn('file.txt', str(context.exception))
+
+    def test_create_folder_at_root(self):
+        """Should create folder at root level."""
+        result = self.service.create_folder(None, 'new_folder')
+
+        # Verify put_object was called with correct key
+        self.mock_s3_client.put_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='new_folder/',
+            Body=b''
+        )
+        self.assertEqual(result, 'new_folder/')
+
+    def test_create_folder_with_prefix(self):
+        """Should create folder within existing prefix."""
+        result = self.service.create_folder('uploads/', 'images')
+
+        # Verify put_object was called with correct key
+        self.mock_s3_client.put_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='uploads/images/',
+            Body=b''
+        )
+        self.assertEqual(result, 'uploads/images/')
+
+    def test_create_folder_nested(self):
+        """Should create folder in deeply nested prefix."""
+        result = self.service.create_folder('projects/archive/', '2024')
+
+        self.mock_s3_client.put_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='projects/archive/2024/',
+            Body=b''
+        )
+        self.assertEqual(result, 'projects/archive/2024/')
+
+    def test_create_folder_prefix_without_trailing_slash(self):
+        """Should handle prefix without trailing slash."""
+        result = self.service.create_folder('uploads', 'images')
+
+        # Should add trailing slash if missing
+        self.mock_s3_client.put_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='uploads/images/',
+            Body=b''
+        )
+
+    def test_create_folder_access_denied_error(self):
+        """Should raise S3AccessDeniedError on 403 during create."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': '403', 'Message': 'Access Denied'}
+        }
+        self.mock_s3_client.put_object.side_effect = ClientError(
+            error_response, 'PutObject'
+        )
+
+        with self.assertRaises(S3AccessDeniedError) as context:
+            self.service.create_folder(None, 'test_folder')
+
+        self.assertIn('test-bucket', str(context.exception))
+
+    def test_create_folder_bucket_not_found_error(self):
+        """Should raise S3BucketNotFoundError when bucket doesn't exist."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'NoSuchBucket', 'Message': 'Bucket not found'}
+        }
+        self.mock_s3_client.put_object.side_effect = ClientError(
+            error_response, 'PutObject'
+        )
+
+        with self.assertRaises(S3BucketNotFoundError):
+            self.service.create_folder(None, 'test_folder')
+
+    def test_create_folder_credentials_error(self):
+        """Should raise S3CredentialsError when no credentials."""
+        from botocore.exceptions import NoCredentialsError
+
+        self.mock_s3_client.put_object.side_effect = NoCredentialsError()
+
+        with self.assertRaises(S3CredentialsError):
+            self.service.create_folder(None, 'test_folder')
+
+    def test_create_folder_connection_error(self):
+        """Should raise S3ConnectionError on connection issues."""
+        from botocore.exceptions import EndpointConnectionError
+
+        self.mock_s3_client.put_object.side_effect = EndpointConnectionError(
+            endpoint_url='https://s3.amazonaws.com'
+        )
+
+        with self.assertRaises(S3ConnectionError):
+            self.service.create_folder(None, 'test_folder')
+
+    def test_create_folder_generic_error(self):
+        """Should raise S3CreateFolderError for other errors."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'InternalError', 'Message': 'Internal server error'}
+        }
+        self.mock_s3_client.put_object.side_effect = ClientError(
+            error_response, 'PutObject'
+        )
+
+        with self.assertRaises(S3CreateFolderError) as context:
+            self.service.create_folder(None, 'test_folder')
+
+        self.assertIn('test_folder', str(context.exception))
 
 
 if __name__ == '__main__':

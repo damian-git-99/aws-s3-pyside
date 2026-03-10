@@ -12,6 +12,10 @@ from PySide6.QtWidgets import (
     QMenuBar,
     QMenu,
     QMainWindow,
+    QDialog,
+    QLineEdit,
+    QDialogButtonBox,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
@@ -96,6 +100,12 @@ class BucketBrowserView(BaseView):
         spacer = QWidget()
         spacer.setFixedWidth(10)
         self._toolbar.addWidget(spacer)
+
+        # Create Folder button
+        create_folder_btn = QPushButton("Create Folder")
+        create_folder_btn.setObjectName("create_folder_btn")
+        create_folder_btn.clicked.connect(self._on_create_folder_clicked)
+        self._toolbar.addWidget(create_folder_btn)
 
         # Upload button (placeholder)
         upload_btn = QPushButton("Upload")
@@ -555,3 +565,80 @@ class BucketBrowserView(BaseView):
         if self._status_label:
             self._status_label.setText(message)
             self._status_label.setStyleSheet("color: green;")
+
+    def _on_create_folder_clicked(self) -> None:
+        """Handle Create Folder button click."""
+        if self._presenter:
+            self._presenter.on_create_folder_clicked()
+
+    def show_create_folder_dialog(self, parent=None) -> Optional[str]:
+        """Show dialog for creating a new folder.
+
+        Args:
+            parent: Parent widget for the dialog
+
+        Returns:
+            Folder name entered by user, or None if cancelled
+        """
+        dialog = CreateFolderDialog(parent or self)
+        if dialog.exec() == QDialog.Accepted:
+            return dialog.get_folder_name()
+        return None
+
+
+class CreateFolderDialog(QDialog):
+    """Dialog for creating a new folder."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Create Folder")
+        self.setModal(True)
+        self.resize(300, 100)
+
+        layout = QVBoxLayout()
+
+        # Label
+        label = QLabel("Folder name:")
+        layout.addWidget(label)
+
+        # Input field
+        self._name_input = QLineEdit()
+        self._name_input.setPlaceholderText("Enter folder name")
+        layout.addWidget(self._name_input)
+
+        # Buttons
+        button_box = QDialogButtonBox()
+        create_button = button_box.addButton("Create", QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_button = button_box.addButton(QDialogButtonBox.StandardButton.Cancel)
+        create_button.clicked.connect(self._on_accepted)
+        cancel_button.clicked.connect(self.reject)
+        layout.addWidget(button_box)
+
+        self.setLayout(layout)
+
+        # Set focus to input
+        self._name_input.setFocus()
+
+    def _on_accepted(self) -> None:
+        """Handle Create button click."""
+        folder_name = self._name_input.text().strip()
+
+        if not folder_name:
+            QMessageBox.warning(self, "Invalid Name", "Folder name cannot be empty.")
+            return
+
+        # Check for invalid characters
+        invalid_chars = '/\\:*?"<>|'
+        if any(char in folder_name for char in invalid_chars):
+            QMessageBox.warning(
+                self,
+                "Invalid Name",
+                f"Folder name cannot contain any of these characters: {invalid_chars}"
+            )
+            return
+
+        self.accept()
+
+    def get_folder_name(self) -> str:
+        """Return the folder name entered by user."""
+        return self._name_input.text().strip()

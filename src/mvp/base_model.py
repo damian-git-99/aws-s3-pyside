@@ -9,6 +9,8 @@ class ModelSignals(QObject):
     data_loaded = Signal()
     error_occurred = Signal(str)
     file_deleted = Signal(str)  # Emitted when file is deleted, carries filename
+    folder_created = Signal(str)  # Emitted when folder is created, carries folder name
+    folder_creation_error = Signal(str)  # Emitted when folder creation fails, carries error message
 
 
 class BaseModel(ABC):
@@ -38,12 +40,20 @@ class BaseModel(ABC):
     def notify_file_deleted(self, filename: str) -> None:
         """Emit signal when a file is deleted."""
         self.signals.file_deleted.emit(filename)
-    
+
+    def notify_folder_created(self, folder_name: str) -> None:
+        """Emit signal when a folder is created."""
+        self.signals.folder_created.emit(folder_name)
+
+    def notify_folder_creation_error(self, error_message: str) -> None:
+        """Emit signal when folder creation fails."""
+        self.signals.folder_creation_error.emit(error_message)
+
     @abstractmethod
     def load_data(self) -> None:
         """Load data from the data source. Must be implemented by subclasses."""
         pass
-    
+
     @abstractmethod
     def get_data(self) -> Any:
         """Return the current data. Must be implemented by subclasses."""

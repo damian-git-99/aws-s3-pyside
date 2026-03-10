@@ -1,4 +1,9 @@
-## ADDED Requirements
+# file-upload Specification
+
+## Purpose
+Allow users to upload files to S3 buckets through the UI with progress tracking.
+
+## Requirements
 
 ### Requirement: User can upload a single file with progress
 The system SHALL allow users to upload a single file to the current folder location with real-time progress indication.

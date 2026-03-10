@@ -18,6 +18,7 @@ from src.services.s3_errors import (
     S3UploadError,
     S3DeleteError,
     S3ObjectNotFoundError,
+    S3CreateFolderError,
 )
 
 
@@ -266,3 +267,58 @@ class S3FileService:
             
         except Exception as e:
             raise S3DeleteError(key, str(e)) from e
+
+    def create_folder(self, prefix: Optional[str], folder_name: str) -> str:
+        """Create a folder (prefix) in S3 bucket.
+
+        In S3, folders are represented as empty objects with keys ending in /.
+        This method creates such an object to represent a folder.
+
+        Args:
+            prefix: Optional prefix (folder path) where folder should be created
+            folder_name: Name of the folder to create
+
+        Returns:
+            The full S3 key of the created folder (e.g., "folder_name/" or "prefix/folder_name/")
+
+        Raises:
+            S3AccessDeniedError: If credentials lack bucket write permission
+            S3BucketNotFoundError: If bucket doesn't exist
+            S3CredentialsError: If AWS credentials are missing/invalid
+            S3ConnectionError: If cannot connect to AWS
+            S3CreateFolderError: If folder creation fails for other reasons
+        """
+        # Construct full key: prefix + folder_name + "/"
+        if prefix:
+            # Ensure prefix ends with /
+            prefix_normalized = prefix if prefix.endswith('/') else prefix + '/'
+            key = f"{prefix_normalized}{folder_name}/"
+        else:
+            key = f"{folder_name}/"
+
+        try:
+            # Create empty object with trailing / to represent folder
+            self._s3.put_object(
+                Bucket=self.bucket_name,
+                Key=key,
+                Body=b''  # Empty body
+            )
+            return key
+
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            if error_code == '403' or error_code == 'AccessDenied':
+                raise S3AccessDeniedError(self.bucket_name) from e
+            elif error_code == '404' or error_code == 'NoSuchBucket':
+                raise S3BucketNotFoundError(self.bucket_name) from e
+            else:
+                raise S3CreateFolderError(folder_name, e.response.get('Error', {}).get('Message', str(e))) from e
+
+        except NoCredentialsError as e:
+            raise S3CredentialsError() from e
+
+        except EndpointConnectionError as e:
+            raise S3ConnectionError() from e
+
+        except Exception as e:
+            raise S3CreateFolderError(folder_name, str(e)) from e

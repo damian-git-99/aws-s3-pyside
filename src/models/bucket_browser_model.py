@@ -143,16 +143,16 @@ class BucketBrowserModel(BaseModel):
     
     def delete_file(self, key: str) -> None:
         """Delete a file from S3 bucket.
-        
+
         Args:
             key: The S3 key (path) of the file to delete (e.g., "folder/file.txt")
-            
+
         Raises:
             Various S3Error subclasses on failure
         """
         if not self._s3_service:
             raise RuntimeError("S3 service not configured. Cannot delete file.")
-        
+
         try:
             # Delete from S3
             self._s3_service.delete_object(key)
@@ -162,3 +162,26 @@ class BucketBrowserModel(BaseModel):
         except S3Error as e:
             # Emit error signal with detailed message
             self.notify_error(str(e))
+
+    def create_folder(self, prefix: Optional[str], folder_name: str) -> None:
+        """Create a folder in the S3 bucket.
+
+        Args:
+            prefix: Optional prefix (current location) where folder should be created
+            folder_name: Name of the folder to create
+
+        Raises:
+            RuntimeError: If S3 service not configured
+            Various S3Error subclasses on failure
+        """
+        if not self._s3_service:
+            raise RuntimeError("S3 service not configured. Cannot create folder.")
+
+        try:
+            # Create folder in S3
+            created_key = self._s3_service.create_folder(prefix, folder_name)
+            # Emit success signal with folder name
+            self.notify_folder_created(folder_name)
+        except S3Error as e:
+            # Emit error signal with detailed message
+            self.notify_folder_creation_error(str(e))

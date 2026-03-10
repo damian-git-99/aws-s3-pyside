@@ -1,4 +1,9 @@
-## ADDED Requirements
+# file-deletion Specification
+
+## Purpose
+Allow users to delete files from S3 buckets through the UI with confirmation.
+
+## Requirements
 
 ### Requirement: User can delete files from S3
 The system SHALL provide a delete button for each file that triggers a confirmation dialog before deletion. Upon confirmation, the file SHALL be permanently removed from S3 bucket. The system SHALL handle S3-specific errors gracefully.
