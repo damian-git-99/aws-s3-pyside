@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 """Main entry point for the Bucket Browser application."""
 import sys
+import logging
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
+
+# Configure logging to show in console
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
+# Silence boto3/botocore logs - only show warnings and errors
+logging.getLogger('boto3').setLevel(logging.WARNING)
+logging.getLogger('botocore').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('s3transfer').setLevel(logging.WARNING)
 
 from src.config import validate_config, ConfigurationError, load_config
 from src.models.bucket_browser_model import BucketBrowserModel
