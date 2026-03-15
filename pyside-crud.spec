@@ -2,18 +2,44 @@
 
 import sys
 import os
+from PyInstaller.utils.hooks import collect_all
 
 # PyInstaller runs the spec file with the working directory set to the spec location
 # so we can use the current directory as the project root
 block_cipher = None
 
+# Collect all files from src package
+datas = []
+binaries = []
+hiddenimports = []
+
+# Collect all src modules
+tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('src')
+datas.extend(tmp_datas)
+binaries.extend(tmp_binaries)
+hiddenimports.extend(tmp_hiddenimports)
+
+# Collect external dependencies
+tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('PySide6')
+datas.extend(tmp_datas)
+binaries.extend(tmp_binaries)
+hiddenimports.extend(tmp_hiddenimports)
+
+tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('boto3')
+datas.extend(tmp_datas)
+binaries.extend(tmp_binaries)
+hiddenimports.extend(tmp_hiddenimports)
+
+tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('botocore')
+datas.extend(tmp_datas)
+binaries.extend(tmp_binaries)
+hiddenimports.extend(tmp_hiddenimports)
+
 a = Analysis(
     ['src/main.py'],
     pathex=[os.getcwd()],
-    binaries=[],
-    datas=[
-        # Include any data files if needed
-    ],
+    binaries=binaries,
+    datas=datas,
     hiddenimports=[
         # Package __init__ files
         'src',
