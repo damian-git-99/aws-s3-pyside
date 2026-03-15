@@ -2,6 +2,7 @@
 """Main entry point for the Bucket Browser application."""
 import sys
 import logging
+import os
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -18,7 +19,9 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('s3transfer').setLevel(logging.WARNING)
 
-from src.config import validate_config, ConfigurationError, load_config
+from src.config.config_manager import ConfigManager, get_config_manager
+from src.config import ConfigManager as ConfigManagerClass
+from src.presenters.config_presenter import ConfigPresenter
 from src.models.bucket_browser_model import BucketBrowserModel
 from src.views.bucket_browser_view import BucketBrowserView
 from src.presenters.bucket_browser_presenter import BucketBrowserPresenter
@@ -62,27 +65,71 @@ def show_config_error(missing_vars):
     sys.exit(1)
 
 
+def run_setup_wizard(config_presenter):
+    """Run the setup wizard for first-time configuration.
+    
+    Args:
+        config_presenter: ConfigPresenter instance
+        
+    Returns:
+        True if setup was completed, False if cancelled
+    """
+    return config_presenter.show_setup_wizard()
+
+
 def main():
     """Main application entry point."""
-    # Check configuration before creating QApplication
-    is_valid, missing_vars = validate_config()
-    if not is_valid:
-        show_config_error(missing_vars)
-    
+    # Create QApplication first (needed for dialogs)
     app = QApplication(sys.argv)
 
     # Apply modern styling
     apply_style(app)
 
+    # Initialize configuration manager
+    config_manager = get_config_manager()
+    
+    # Check if this is first-time setup
+    needs_setup = not config_manager.has_config()
+    
+    # Create config presenter (without parent for now, will set later)
+    config_presenter = ConfigPresenter(config_manager)
+    
+    if needs_setup:
+        # Show setup wizard
+        setup_completed = run_setup_wizard(config_presenter)
+        
+        if not setup_completed:
+            # User cancelled setup, exit application
+            sys.exit(0)
+    
+    # Verify we have all required configuration
+    if not config_manager.is_fully_configured():
+        missing = config_manager.get_missing_keys()
+        show_config_error(missing)
+        sys.exit(1)
+    
     # Load configuration and create S3 service
-    config = load_config()
-    s3_service = S3FileService(bucket_name=config.bucket_name)
+    config = config_manager.get_all()
+    bucket_name = config.get('AWS_S3_BUCKET_NAME', '')
+    
+    # Set environment variables for boto3
+    os.environ['AWS_ACCESS_KEY_ID'] = config.get('AWS_ACCESS_KEY_ID', '')
+    os.environ['AWS_SECRET_ACCESS_KEY'] = config.get('AWS_SECRET_ACCESS_KEY', '')
+    os.environ['AWS_DEFAULT_REGION'] = config.get('AWS_DEFAULT_REGION', '')
+    
+    s3_service = S3FileService(bucket_name=bucket_name)
 
     # Create Model
     model = BucketBrowserModel()
 
     # Create View
     view = BucketBrowserView()
+    
+    # Set parent for config presenter (for modal dialogs)
+    config_presenter._parent = view
+    
+    # Connect settings button to config presenter
+    view.set_on_settings_callback(config_presenter.show_settings_panel)
 
     # Create Presenter with S3 service
     presenter = BucketBrowserPresenter(model, view, s3_service=s3_service)

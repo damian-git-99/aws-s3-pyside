@@ -39,10 +39,12 @@ class BucketBrowserView(BaseView):
         self._menu_bar: Optional[QMenuBar] = None
         self._home_btn: Optional[QPushButton] = None
         self._up_btn: Optional[QPushButton] = None
+        self._settings_btn: Optional[QPushButton] = None
         self._breadcrumb_widget: Optional[QWidget] = None
         self._breadcrumb_actions: List[QAction] = []
         self._header_container: Optional[QWidget] = None
         self._breadcrumb_container: Optional[QWidget] = None
+        self._on_settings_callback: Optional[callable] = None
         self.setup_ui()
 
     def setup_ui(self) -> None:
@@ -132,6 +134,12 @@ class BucketBrowserView(BaseView):
         """)
         delete_btn.clicked.connect(self._on_delete_selected_clicked)
         self._toolbar.addWidget(delete_btn)
+
+        # Settings button
+        self._settings_btn = QPushButton("Settings")
+        self._settings_btn.setObjectName("settings_btn")
+        self._settings_btn.clicked.connect(self._on_settings_clicked)
+        self._toolbar.addWidget(self._settings_btn)
 
         # Disable navigation buttons initially (at root)
         self.enable_navigation_buttons(can_go_up=False)
@@ -442,6 +450,19 @@ class BucketBrowserView(BaseView):
         """Handle Up button click."""
         if self._presenter:
             self._presenter.navigate_up()
+
+    def _on_settings_clicked(self) -> None:
+        """Handle Settings button click."""
+        if self._on_settings_callback:
+            self._on_settings_callback()
+
+    def set_on_settings_callback(self, callback: callable) -> None:
+        """Set callback for Settings button click.
+        
+        Args:
+            callback: Function to call when Settings button is clicked
+        """
+        self._on_settings_callback = callback
 
     def _on_breadcrumb_clicked(self, prefix: Optional[str]) -> None:
         """Handle breadcrumb segment click.
