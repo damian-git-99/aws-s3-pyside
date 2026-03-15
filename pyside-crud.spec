@@ -2,18 +2,17 @@
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_submodules, collect_all
+from PyInstaller.utils.hooks import collect_all
 
-# PyInstaller runs the spec file with the working directory set to the spec location
-# so we can use the current directory as the project root
+# Add the current directory to Python path so PyInstaller can find src
+sys.path.insert(0, os.getcwd())
+
 block_cipher = None
-
-# Collect all submodules from src package automatically
-hiddenimports = collect_submodules('src')
 
 # Collect external dependencies
 datas = []
 binaries = []
+hiddenimports = []
 
 # Collect PySide6
 tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('PySide6')
@@ -34,10 +33,41 @@ hiddenimports.extend(tmp_hiddenimports)
 
 a = Analysis(
     ['src/main.py'],
-    pathex=[os.getcwd()],
+    pathex=[os.getcwd(), os.path.join(os.getcwd(), 'src')],
     binaries=binaries,
     datas=datas,
-    hiddenimports=hiddenimports,
+    hiddenimports=[
+        # Explicitly list all src modules
+        'src',
+        'src.config',
+        'src.config.config_manager',
+        'src.presenters',
+        'src.presenters.config_presenter',
+        'src.presenters.bucket_browser_presenter',
+        'src.models',
+        'src.models.bucket_browser_model',
+        'src.models.bucket_object',
+        'src.views',
+        'src.views.bucket_browser_view',
+        'src.views.setup_wizard_view',
+        'src.views.settings_panel_view',
+        'src.views.folder_first_sort_proxy_model',
+        'src.services',
+        'src.services.s3_service',
+        'src.services.s3_errors',
+        'src.utils',
+        'src.utils.styles',
+        'src.utils.file_icons',
+        'src.mvp',
+        'src.mvp.base_model',
+        'src.mvp.base_view',
+        'src.mvp.base_presenter',
+        'src.mvp.contracts',
+        'src.main_window',
+        # External deps
+        'dotenv',
+        'jmespath',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -64,7 +94,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=True,  # Changed to True temporarily to see errors
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

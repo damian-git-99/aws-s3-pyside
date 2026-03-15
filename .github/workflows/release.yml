@@ -79,7 +79,9 @@ jobs:
           uv pip install pyinstaller --system
 
       - name: Build executable
+        shell: bash
         run: |
+          export PYTHONPATH="${{ github.workspace }}:${{ github.workspace }}/src:$PYTHONPATH"
           pyinstaller pyside-crud.spec
 
       - name: Rename artifact with version
