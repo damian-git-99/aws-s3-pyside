@@ -2,29 +2,26 @@
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_submodules, collect_all
 
 # PyInstaller runs the spec file with the working directory set to the spec location
 # so we can use the current directory as the project root
 block_cipher = None
 
-# Collect all files from src package
-datas = []
-binaries = []
-hiddenimports = []
-
-# Collect all src modules
-tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('src')
-datas.extend(tmp_datas)
-binaries.extend(tmp_binaries)
-hiddenimports.extend(tmp_hiddenimports)
+# Collect all submodules from src package automatically
+hiddenimports = collect_submodules('src')
 
 # Collect external dependencies
+datas = []
+binaries = []
+
+# Collect PySide6
 tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('PySide6')
 datas.extend(tmp_datas)
 binaries.extend(tmp_binaries)
 hiddenimports.extend(tmp_hiddenimports)
 
+# Collect boto3 and botocore
 tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all('boto3')
 datas.extend(tmp_datas)
 binaries.extend(tmp_binaries)
@@ -40,61 +37,7 @@ a = Analysis(
     pathex=[os.getcwd()],
     binaries=binaries,
     datas=datas,
-    hiddenimports=[
-        # Package __init__ files
-        'src',
-        'src.config',
-        'src.presenters',
-        'src.models',
-        'src.views',
-        'src.services',
-        'src.utils',
-        'src.mvp',
-        
-        # Config modules
-        'src.config.config_manager',
-        
-        # Presenter modules
-        'src.presenters.config_presenter',
-        'src.presenters.bucket_browser_presenter',
-        
-        # Model modules
-        'src.models.bucket_browser_model',
-        'src.models.bucket_object',
-        
-        # View modules
-        'src.views.bucket_browser_view',
-        'src.views.setup_wizard_view',
-        'src.views.settings_panel_view',
-        'src.views.folder_first_sort_proxy_model',
-        
-        # Service modules
-        'src.services.s3_service',
-        'src.services.s3_errors',
-        
-        # Utility modules
-        'src.utils.styles',
-        'src.utils.file_icons',
-        
-        # MVP modules
-        'src.mvp.base_model',
-        'src.mvp.base_view',
-        'src.mvp.base_presenter',
-        'src.mvp.contracts',
-        
-        # Other modules
-        'src.main_window',
-        
-        # External dependencies
-        'PySide6',
-        'PySide6.QtCore',
-        'PySide6.QtWidgets',
-        'PySide6.QtGui',
-        'boto3',
-        'botocore',
-        'dotenv',
-        'jmespath',
-    ],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
