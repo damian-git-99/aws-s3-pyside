@@ -66,22 +66,15 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install uv
+      - name: Install dependencies and PyInstaller
         run: |
-          pip install uv
-
-      - name: Install dependencies
-        run: |
-          uv pip install -r requirements.txt --system
-
-      - name: Install PyInstaller
-        run: |
-          uv pip install pyinstaller --system
+          pip install -r requirements.txt pyinstaller
 
       - name: Build executable
         shell: bash
         run: |
-          pyinstaller s3-bucket-browser.spec
+          export PYTHONPATH="${{ github.workspace }}:$PYTHONPATH"
+          python -m PyInstaller s3-bucket-browser.spec
 
       - name: Rename artifact with version
         shell: bash

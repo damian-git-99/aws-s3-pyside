@@ -2,6 +2,10 @@
 
 import os
 import sys
+
+# Add current directory to Python path so PyInstaller can find src
+sys.path.insert(0, os.path.abspath('.'))
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 hiddenimports = collect_submodules('src')
