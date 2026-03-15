@@ -15,20 +15,51 @@ a = Analysis(
         # Include any data files if needed
     ],
     hiddenimports=[
+        # Package __init__ files
         'src',
         'src.config',
-        'src.config.config_manager',
         'src.presenters',
+        'src.models',
+        'src.views',
+        'src.services',
+        'src.utils',
+        'src.mvp',
+        
+        # Config modules
+        'src.config.config_manager',
+        
+        # Presenter modules
         'src.presenters.config_presenter',
         'src.presenters.bucket_browser_presenter',
-        'src.models',
+        
+        # Model modules
         'src.models.bucket_browser_model',
-        'src.views',
+        'src.models.bucket_object',
+        
+        # View modules
         'src.views.bucket_browser_view',
-        'src.services',
+        'src.views.setup_wizard_view',
+        'src.views.settings_panel_view',
+        'src.views.folder_first_sort_proxy_model',
+        
+        # Service modules
         'src.services.s3_service',
-        'src.utils',
+        'src.services.s3_errors',
+        
+        # Utility modules
         'src.utils.styles',
+        'src.utils.file_icons',
+        
+        # MVP modules
+        'src.mvp.base_model',
+        'src.mvp.base_view',
+        'src.mvp.base_presenter',
+        'src.mvp.contracts',
+        
+        # Other modules
+        'src.main_window',
+        
+        # External dependencies
         'PySide6',
         'PySide6.QtCore',
         'PySide6.QtWidgets',
@@ -36,6 +67,7 @@ a = Analysis(
         'boto3',
         'botocore',
         'dotenv',
+        'jmespath',
     ],
     hookspath=[],
     hooksconfig={},
