@@ -2,17 +2,14 @@
 
 import sys
 import os
-from pathlib import Path
 
-# Get the project root (directory where this spec file is located)
-spec_file = os.path.abspath(__file__)
-project_root = Path(os.path.dirname(spec_file))
-
+# PyInstaller runs the spec file with the working directory set to the spec location
+# so we can use the current directory as the project root
 block_cipher = None
 
 a = Analysis(
     ['src/main.py'],
-    pathex=[str(project_root)],
+    pathex=[os.getcwd()],
     binaries=[],
     datas=[
         # Include any data files if needed
@@ -38,7 +35,7 @@ a = Analysis(
         'PySide6.QtGui',
         'boto3',
         'botocore',
-        'python-dotenv',
+        'dotenv',
     ],
     hookspath=[],
     hooksconfig={},
