@@ -3,8 +3,9 @@
 import os
 import sys
 
-# Add current directory to Python path so PyInstaller can find src
-sys.path.insert(0, os.path.abspath('.'))
+# Siempre relativo al .spec, no al working directory
+spec_dir = os.path.dirname(os.path.abspath(SPEC))
+sys.path.insert(0, spec_dir)
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
@@ -39,8 +40,8 @@ except Exception:
     pass
 
 a = Analysis(
-    ['src/main.py'],
-    pathex=[os.path.abspath('.')],
+    [os.path.join(spec_dir, 'src', 'main.py')],  # path absoluto al entry point
+    pathex=[spec_dir],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
