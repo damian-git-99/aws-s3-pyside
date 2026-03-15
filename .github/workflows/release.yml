@@ -61,20 +61,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies and PyInstaller
-        run: |
-          pip install -r requirements.txt pyinstaller
+      - name: Install dependencies
+        run: uv sync
 
       - name: Build executable
         shell: bash
-        run: |
-          export PYTHONPATH="${{ github.workspace }}:$PYTHONPATH"
-          python -m PyInstaller s3-bucket-browser.spec
+        run: uv run python build.py --clean
 
       - name: Rename artifact with version
         shell: bash
