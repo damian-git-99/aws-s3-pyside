@@ -41,6 +41,8 @@ class BucketBrowserView(BaseView):
         self._up_btn: Optional[QPushButton] = None
         self._breadcrumb_widget: Optional[QWidget] = None
         self._breadcrumb_actions: List[QAction] = []
+        self._header_container: Optional[QWidget] = None
+        self._breadcrumb_container: Optional[QWidget] = None
         self.setup_ui()
 
     def setup_ui(self) -> None:
@@ -58,10 +60,10 @@ class BucketBrowserView(BaseView):
         if self._menu_bar:
             layout.setMenuBar(self._menu_bar)
 
-        # Toolbar
-        self._setup_toolbar()
-        if self._toolbar:
-            layout.addWidget(self._toolbar)
+        # Header container with breadcrumb and toolbar
+        self._setup_header_container()
+        if self._header_container:
+            layout.addWidget(self._header_container)
 
         # Table
         self._setup_table()
@@ -131,15 +133,39 @@ class BucketBrowserView(BaseView):
         delete_btn.clicked.connect(self._on_delete_selected_clicked)
         self._toolbar.addWidget(delete_btn)
 
-        # Breadcrumb area (stretch)
+        # Disable navigation buttons initially (at root)
+        self.enable_navigation_buttons(can_go_up=False)
+
+    def _setup_header_container(self) -> None:
+        """Setup the header container with breadcrumb and toolbar in separate rows."""
+        self._header_container = QWidget()
+        self._header_container.setObjectName("header_container")
+        header_layout = QVBoxLayout(self._header_container)
+        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(8, 8, 8, 8)
+        
+        # Breadcrumb row
+        self._breadcrumb_container = QWidget()
+        self._breadcrumb_container.setObjectName("breadcrumb_container")
+        breadcrumb_row_layout = QHBoxLayout(self._breadcrumb_container)
+        breadcrumb_row_layout.setContentsMargins(0, 0, 0, 0)
+        breadcrumb_row_layout.setSpacing(4)
+        
+        # Breadcrumb widget
         self._breadcrumb_widget = QWidget()
+        self._breadcrumb_widget.setObjectName("breadcrumb_widget")
         self._breadcrumb_layout = QHBoxLayout(self._breadcrumb_widget)
         self._breadcrumb_layout.setContentsMargins(5, 0, 5, 0)
         self._breadcrumb_layout.addStretch()
-        self._toolbar.addWidget(self._breadcrumb_widget)
-
-        # Disable navigation buttons initially (at root)
-        self.enable_navigation_buttons(can_go_up=False)
+        breadcrumb_row_layout.addWidget(self._breadcrumb_widget)
+        breadcrumb_row_layout.addStretch()
+        
+        header_layout.addWidget(self._breadcrumb_container)
+        
+        # Toolbar row
+        self._setup_toolbar()
+        if self._toolbar:
+            header_layout.addWidget(self._toolbar)
 
     def _setup_menu_bar(self) -> None:
         """Setup the menu bar."""
