@@ -1,10 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import sys
+import os
 from pathlib import Path
 
-# Get the project root
-project_root = Path(SPECDIR).parent
+# Get the project root (directory where this spec file is located)
+spec_file = os.path.abspath(__file__)
+project_root = Path(os.path.dirname(spec_file))
 
 block_cipher = None
 
