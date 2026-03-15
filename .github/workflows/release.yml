@@ -81,14 +81,13 @@ jobs:
       - name: Build executable
         shell: bash
         run: |
-          export PYTHONPATH="${{ github.workspace }}:${{ github.workspace }}/src:$PYTHONPATH"
-          pyinstaller pyside-crud.spec
+          pyinstaller s3-bucket-browser.spec
 
       - name: Rename artifact with version
         shell: bash
         run: |
           VERSION=${{ needs.release.outputs.version }}
-          mv dist/pyside-crud${{ matrix.ext }} dist/pyside-crud-${VERSION}-${{ matrix.platform }}${{ matrix.ext }}
+          mv dist/s3-bucket-browser${{ matrix.ext }} dist/pyside-crud-${VERSION}-${{ matrix.platform }}${{ matrix.ext }}
 
       - name: Upload artifact to release
         uses: softprops/action-gh-release@v1

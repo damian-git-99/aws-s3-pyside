@@ -10,12 +10,16 @@ hiddenimports += [
     'PySide6.QtCore',
     'PySide6.QtGui',
     'PySide6.QtWidgets',
+    'PySide6.QtNetwork',
     'boto3',
     'boto3.resources',
     'botocore',
     'botocore.exceptions',
     's3transfer',
+    'jmespath',
     'dotenv',
+    'urllib3',
+    'certifi',
 ]
 
 datas = []
