@@ -137,6 +137,28 @@ class MockView(BaseView):
         self._error_message = message
         self.errors.append(message)
 
+    def show_save_file_dialog(self, filename: str) -> Optional[str]:
+        """Mock show_save_file_dialog."""
+        return getattr(self, '_save_file_dialog_result', None)
+
+    def show_download_progress_dialog(self, filename: str):
+        """Mock show_download_progress_dialog."""
+        mock_dialog = MagicMock()
+        self._download_progress_dialog = mock_dialog
+        return mock_dialog
+
+    def close_download_progress_dialog(self, progress_dialog) -> None:
+        """Mock close_download_progress_dialog."""
+        self._download_progress_dialog_closed = True
+
+    def was_error_with_retry_shown(self) -> bool:
+        """Check if error with retry was shown."""
+        return hasattr(self, '_retry_callback')
+
+    def set_save_file_dialog_result(self, file_path: Optional[str]) -> None:
+        """Set the result to return from show_save_file_dialog."""
+        self._save_file_dialog_result = file_path
+
 
 def create_mock_view() -> MockView:
     """Factory function to create a MockView instance."""

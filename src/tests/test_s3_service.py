@@ -15,6 +15,7 @@ from src.services.s3_errors import (
     S3DeleteError,
     S3ObjectNotFoundError,
     S3CreateFolderError,
+    S3DownloadError,
 )
 from src.services.s3_service import S3FileService, S3ListResult
 
@@ -554,6 +555,142 @@ class TestS3FileService(unittest.TestCase):
             self.service.create_folder(None, 'test_folder')
 
         self.assertIn('test_folder', str(context.exception))
+
+    def test_download_fileobj_success(self):
+        """Should successfully download file to file-like object."""
+        output_buffer = io.BytesIO()
+
+        self.service.download_fileobj('test-file.txt', output_buffer)
+
+        self.mock_s3_client.download_fileobj.assert_called_once()
+        call_args = self.mock_s3_client.download_fileobj.call_args
+        self.assertEqual(call_args[0][0], 'test-bucket')
+        self.assertEqual(call_args[0][1], 'test-file.txt')
+        self.assertEqual(call_args[0][2], output_buffer)
+
+    def test_download_fileobj_with_prefix(self):
+        """Should download file with nested path."""
+        output_buffer = io.BytesIO()
+
+        self.service.download_fileobj('folder/subfolder/file.txt', output_buffer)
+
+        call_args = self.mock_s3_client.download_fileobj.call_args
+        self.assertEqual(call_args[0][1], 'folder/subfolder/file.txt')
+
+    def test_download_fileobj_with_progress_callback(self):
+        """Should call progress callback during download."""
+        output_buffer = io.BytesIO()
+        progress_calls = []
+
+        def progress_callback(bytes_transferred):
+            progress_calls.append(bytes_transferred)
+
+        # Mock download_fileobj to simulate progress
+        def mock_download(bucket, key, fileobj, Callback=None):
+            if Callback:
+                Callback(100)
+                Callback(200)
+                Callback(300)
+
+        self.mock_s3_client.download_fileobj.side_effect = mock_download
+
+        self.service.download_fileobj('file.txt', output_buffer, progress_callback)
+
+        self.assertEqual(progress_calls, [100, 200, 300])
+
+    def test_download_fileobj_access_denied_error(self):
+        """Should raise S3AccessDeniedError on 403 during download."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': '403', 'Message': 'Access Denied'}
+        }
+        self.mock_s3_client.download_fileobj.side_effect = ClientError(
+            error_response, 'GetObject'
+        )
+
+        output_buffer = io.BytesIO()
+
+        with self.assertRaises(S3AccessDeniedError) as context:
+            self.service.download_fileobj('file.txt', output_buffer)
+
+        self.assertIn('test-bucket', str(context.exception))
+
+    def test_download_fileobj_bucket_not_found_error(self):
+        """Should raise S3BucketNotFoundError when bucket doesn't exist."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'NoSuchBucket', 'Message': 'Bucket not found'}
+        }
+        self.mock_s3_client.download_fileobj.side_effect = ClientError(
+            error_response, 'GetObject'
+        )
+
+        output_buffer = io.BytesIO()
+
+        with self.assertRaises(S3BucketNotFoundError):
+            self.service.download_fileobj('file.txt', output_buffer)
+
+    def test_download_fileobj_object_not_found_error(self):
+        """Should raise S3ObjectNotFoundError when file doesn't exist."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'NoSuchKey', 'Message': 'Object not found'}
+        }
+        self.mock_s3_client.download_fileobj.side_effect = ClientError(
+            error_response, 'GetObject'
+        )
+
+        output_buffer = io.BytesIO()
+
+        with self.assertRaises(S3ObjectNotFoundError) as context:
+            self.service.download_fileobj('missing-file.txt', output_buffer)
+
+        self.assertIn('missing-file.txt', str(context.exception))
+
+    def test_download_fileobj_connection_error(self):
+        """Should raise S3ConnectionError on connection issues during download."""
+        from botocore.exceptions import EndpointConnectionError
+
+        self.mock_s3_client.download_fileobj.side_effect = EndpointConnectionError(
+            endpoint_url='https://s3.amazonaws.com'
+        )
+
+        output_buffer = io.BytesIO()
+
+        with self.assertRaises(S3ConnectionError):
+            self.service.download_fileobj('file.txt', output_buffer)
+
+    def test_download_fileobj_credentials_error(self):
+        """Should raise S3CredentialsError when no credentials during download."""
+        from botocore.exceptions import NoCredentialsError
+
+        self.mock_s3_client.download_fileobj.side_effect = NoCredentialsError()
+
+        output_buffer = io.BytesIO()
+
+        with self.assertRaises(S3CredentialsError):
+            self.service.download_fileobj('file.txt', output_buffer)
+
+    def test_download_fileobj_generic_error(self):
+        """Should raise S3DownloadError for other errors during download."""
+        from botocore.exceptions import ClientError
+
+        error_response = {
+            'Error': {'Code': 'InternalError', 'Message': 'Internal server error'}
+        }
+        self.mock_s3_client.download_fileobj.side_effect = ClientError(
+            error_response, 'GetObject'
+        )
+
+        output_buffer = io.BytesIO()
+
+        with self.assertRaises(S3DownloadError) as context:
+            self.service.download_fileobj('file.txt', output_buffer)
+
+        self.assertIn('file.txt', str(context.exception))
 
 
 if __name__ == '__main__':

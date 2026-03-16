@@ -88,6 +88,65 @@ class UploadWorker(QThread):
         self._cancelled = True
 
 
+class DownloadWorker(QThread):
+    """Worker thread for downloading files from S3.
+
+    Signals:
+        progress: Emitted with percentage (0-100) during download
+        finished: Emitted when download completes successfully
+        error: Emitted when download fails with error message
+    """
+
+    progress = Signal(int)
+    finished = Signal()
+    error = Signal(str)
+
+    def __init__(
+        self,
+        s3_service: S3FileService,
+        key: str,
+        file_path: str,
+        file_size: int = 0
+    ):
+        super().__init__()
+        self._s3_service = s3_service
+        self._key = key
+        self._file_path = file_path
+        self._file_size = file_size
+        self._cancelled = False
+
+    def run(self) -> None:
+        """Execute the download operation in background thread."""
+        try:
+            # Track progress
+            last_percentage = [0]
+
+            def progress_callback(bytes_transferred):
+                if self._file_size > 0:
+                    percentage = int((bytes_transferred / self._file_size) * 100)
+                    if percentage != last_percentage[0]:
+                        last_percentage[0] = percentage
+                        self.progress.emit(percentage)
+
+            # Open file for writing in binary mode
+            with open(self._file_path, 'wb') as f:
+                self._s3_service.download_fileobj(
+                    key=self._key,
+                    file_obj=f,
+                    progress_callback=progress_callback
+                )
+
+            if not self._cancelled:
+                self.finished.emit()
+        except Exception as e:
+            if not self._cancelled:
+                self.error.emit(str(e))
+
+    def cancel(self) -> None:
+        """Request cancellation of the download."""
+        self._cancelled = True
+
+
 class BucketBrowserPresenter(BasePresenter):
     """Presenter for the bucket browser.
 
@@ -116,6 +175,7 @@ class BucketBrowserPresenter(BasePresenter):
         self._current_prefix: Optional[str] = None
         self._bucket_name: str = ""
         self._upload_worker: Optional[UploadWorker] = None
+        self._download_worker: Optional[DownloadWorker] = None
 
     def initialize(self) -> None:
         """Initialize the presenter and load initial data."""
@@ -453,8 +513,90 @@ class BucketBrowserPresenter(BasePresenter):
 
     def _on_model_error(self, error_message: str) -> None:
         """Handle error signal from model.
-        
+
         Args:
             error_message: Error description
         """
         self._view.show_error(error_message)
+
+    def handle_download_file(self, filename: str) -> None:
+        """Handle file download request from view.
+
+        Shows a save dialog and downloads the file if user confirms.
+
+        Args:
+            filename: Name of the file to download (display name, not full key)
+        """
+        if not self._s3_service:
+            self._view.show_error("Download not available in mock mode")
+            return
+
+        # Show save dialog
+        save_path = self._view.show_save_file_dialog(filename)
+        if not save_path:
+            return  # User cancelled
+
+        # Construct the full S3 key (path) for download
+        if self._current_prefix:
+            key = f"{self._current_prefix}{filename}"
+        else:
+            key = filename
+
+        # Get file size for progress calculation
+        file_size = 0
+        for obj in self._all_objects:
+            if obj.name == filename:
+                file_size = obj.size
+                break
+
+        # Cancel any existing download
+        if self._download_worker and self._download_worker.isRunning():
+            self._download_worker.cancel()
+            self._download_worker.wait()
+
+        # Create progress dialog
+        progress_dialog = self._view.show_download_progress_dialog(filename)
+
+        # Create and configure worker
+        self._download_worker = DownloadWorker(
+            self._s3_service, key, save_path, file_size
+        )
+
+        # Connect signals
+        self._download_worker.progress.connect(progress_dialog.setValue)
+        self._download_worker.finished.connect(
+            lambda: self._on_download_finished(progress_dialog, filename)
+        )
+        self._download_worker.error.connect(
+            lambda err: self._on_download_error(err, progress_dialog)
+        )
+
+        # Start download
+        self._download_worker.start()
+
+    def _on_download_finished(self, progress_dialog, filename: str) -> None:
+        """Handle successful download completion.
+
+        Args:
+            progress_dialog: The progress dialog to close
+            filename: Name of the downloaded file
+        """
+        self._view.close_download_progress_dialog(progress_dialog)
+        self._view.show_message(f"File '{filename}' downloaded successfully")
+        if self._download_worker:
+            self._download_worker = None
+
+    def _on_download_error(self, error_message: str, progress_dialog) -> None:
+        """Handle download error.
+
+        Args:
+            error_message: Error message to display
+            progress_dialog: The progress dialog to close
+        """
+        self._view.close_download_progress_dialog(progress_dialog)
+        self._view.show_error_with_retry(
+            f"Download failed: {error_message}",
+            on_retry=lambda: None  # Retry handled by view re-calling handler
+        )
+        if self._download_worker:
+            self._download_worker = None

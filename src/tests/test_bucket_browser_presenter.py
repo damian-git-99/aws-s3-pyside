@@ -455,6 +455,88 @@ class TestBucketBrowserPresenterNavigation(unittest.TestCase):
         # Assert - error should be in view errors
         self.assertTrue(any(error_msg in str(e) for e in self.view.errors))
 
+    def test_handle_download_file_at_root(self):
+        """Test that download handler constructs correct key at root level."""
+        # Arrange
+        self.view._save_file_dialog_result = '/local/path/file.txt'
+        self.mock_s3_service.download_fileobj = MagicMock()
+        
+        # Add a file object to _all_objects
+        self.presenter._all_objects = [
+            BucketObject(name='file.txt', size=1024, last_modified=datetime.now(), storage_class='STANDARD')
+        ]
+        
+        # Act
+        self.presenter.handle_download_file('file.txt')
+        
+        # Assert - download should be initiated (DownloadWorker created)
+        self.assertIsNotNone(self.presenter._download_worker)
+        self.assertEqual(self.presenter._download_worker._key, 'file.txt')
+
+    def test_handle_download_file_in_nested_folder(self):
+        """Test that download handler constructs full S3 key with prefix."""
+        # Arrange
+        self.view._save_file_dialog_result = '/local/path/file.txt'
+        self.presenter._current_prefix = 'folder/subfolder/'
+        
+        # Add a file object to _all_objects
+        self.presenter._all_objects = [
+            BucketObject(name='file.txt', size=1024, last_modified=datetime.now(), storage_class='STANDARD')
+        ]
+        
+        # Act
+        self.presenter.handle_download_file('file.txt')
+        
+        # Assert - download worker should have full key
+        self.assertIsNotNone(self.presenter._download_worker)
+        self.assertEqual(self.presenter._download_worker._key, 'folder/subfolder/file.txt')
+
+    def test_handle_download_file_cancelled(self):
+        """Test that download is cancelled when user cancels save dialog."""
+        # Arrange - User cancels the save dialog
+        self.view._save_file_dialog_result = None
+        
+        # Act
+        self.presenter.handle_download_file('file.txt')
+        
+        # Assert - no download worker should be created
+        self.assertIsNone(self.presenter._download_worker)
+
+    def test_handle_download_file_no_s3_service(self):
+        """Test that download shows error when no S3 service available."""
+        # Arrange
+        presenter_no_s3 = BucketBrowserPresenter(self.model, self.view)
+        
+        # Act
+        presenter_no_s3.handle_download_file('file.txt')
+        
+        # Assert - error should be shown
+        self.assertTrue(any('not available in mock mode' in str(e) for e in self.view.errors))
+
+    def test_on_download_finished_shows_message(self):
+        """Test that on_download_finished shows success message."""
+        # Arrange
+        mock_dialog = MagicMock()
+        self.presenter._download_worker = MagicMock()
+        
+        # Act
+        self.presenter._on_download_finished(mock_dialog, 'file.txt')
+        
+        # Assert - should show success message
+        self.assertTrue(any('downloaded successfully' in str(msg) for msg in self.view.messages))
+
+    def test_on_download_error_shows_error(self):
+        """Test that on_download_error displays error with retry."""
+        # Arrange
+        mock_dialog = MagicMock()
+        self.presenter._download_worker = MagicMock()
+        
+        # Act
+        self.presenter._on_download_error('Network error', mock_dialog)
+        
+        # Assert - error should be shown with retry callback
+        self.assertTrue(self.view.was_error_with_retry_shown())
+
 
 if __name__ == '__main__':
     unittest.main()
