@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      published: ${{ steps.semantic_release.outputs.published }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run semantic-release
+        id: semantic_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx semantic-release
+          echo "published=true" >> $GITHUB_OUTPUT
+
+      - name: Extract latest tag
+        id: get_version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+  build:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            ext: ''
+          - os: windows-latest
+            platform: windows
+            ext: '.exe'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build executable
+        shell: bash
+        run: uv run python build.py --clean
+
+      - name: Rename artifact with version
+        shell: bash
+        run: |
+          VERSION=${{ needs.release.outputs.version }}
+          mv dist/s3-bucket-browser${{ matrix.ext }} dist/pyside-crud-${VERSION}-${{ matrix.platform }}${{ matrix.ext }}
+
+      - name: Upload artifact to release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.release.outputs.version }}
+          files: dist/pyside-crud-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

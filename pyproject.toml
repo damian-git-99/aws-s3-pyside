@@ -2,14 +2,17 @@
 name = "s3-file-manager"
 version = "0.1.0"
 description = "Desktop application for managing files in AWS S3"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
-    "PySide6>=6.5.0",
+    "PySide6>=6.6.0",
+    "boto3>=1.34.0",
+    "python-dotenv>=1.0.0",
+    "pyinstaller>=6.0.0",
 ]
 
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.uv]
-dev-dependencies = []
+[dependency-groups]
+dev = []

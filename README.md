@@ -158,6 +158,46 @@ When adding new features, follow the MVP pattern:
 
 See [AGENTS.md](AGENTS.md) for detailed guidelines and examples.
 
+## Automated Releases
+
+This project uses **semantic-release** and **GitHub Actions** for automated versioning and cross-platform builds.
+
+### Release Process
+
+1. Ensure your commits follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
+   - `feat:` - New features (minor version bump)
+   - `fix:` - Bug fixes (patch version bump)
+   - `BREAKING CHANGE:` or `!` - Breaking changes (major version bump)
+
+2. To create a release:
+   - Go to the **Actions** tab in GitHub
+   - Select the **Release** workflow
+   - Click **Run workflow**
+   - The workflow will:
+     - Calculate the next version based on commits
+     - Create a GitHub release with auto-generated notes
+     - Build executables for Windows and Linux
+     - Attach executables to the release
+
+3. Download the executables from the GitHub release page:
+   - `pyside-crud-vX.X.X-windows.exe` - Windows executable
+   - `pyside-crud-vX.X.X-linux` - Linux binary
+
+### Manual Testing
+
+Before triggering a release, you can test the build locally:
+
+```bash
+# Install PyInstaller
+uv pip install pyinstaller
+
+# Build executable
+pyinstaller pyside-crud.spec
+
+# Test the executable
+dist/pyside-crud
+```
+
 ## License
 
 MIT License
