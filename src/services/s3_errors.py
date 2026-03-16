@@ -69,3 +69,12 @@ class S3CreateFolderError(S3Error):
         self.folder_name = folder_name
         self.reason = reason
         super().__init__(f"Failed to create folder '{folder_name}': {reason}")
+
+
+class S3DownloadError(S3Error):
+    """Raised when file download from S3 fails."""
+    
+    def __init__(self, key: str, reason: str):
+        self.key = key
+        self.reason = reason
+        super().__init__(f"Failed to download '{key}': {reason}")

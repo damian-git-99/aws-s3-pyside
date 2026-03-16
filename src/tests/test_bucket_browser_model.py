@@ -129,6 +129,30 @@ class TestBucketBrowserModel(unittest.TestCase):
 
         self.assertIn('S3 service not configured', str(context.exception))
 
+    def test_file_downloaded_signal(self):
+        """Model should emit file_downloaded signal."""
+        signal_received = []
+        self.model.signals.file_downloaded.connect(
+            lambda filename: signal_received.append(filename)
+        )
+
+        self.model.notify_file_downloaded('test-file.txt')
+
+        self.assertEqual(len(signal_received), 1)
+        self.assertEqual(signal_received[0], 'test-file.txt')
+
+    def test_download_error_signal(self):
+        """Model should emit download_error signal."""
+        signal_received = []
+        self.model.signals.download_error.connect(
+            lambda msg: signal_received.append(msg)
+        )
+
+        self.model.notify_download_error('Download failed: network error')
+
+        self.assertEqual(len(signal_received), 1)
+        self.assertIn('Download failed', signal_received[0])
+
 
 if __name__ == '__main__':
     unittest.main()

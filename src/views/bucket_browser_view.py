@@ -135,6 +135,24 @@ class BucketBrowserView(BaseView):
         delete_btn.clicked.connect(self._on_delete_selected_clicked)
         self._toolbar.addWidget(delete_btn)
 
+        # Download button - downloads selected file
+        download_btn = QPushButton("Download")
+        download_btn.setObjectName("download_btn")
+        download_btn.setFixedSize(100, 28)
+        download_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        download_btn.clicked.connect(self._on_download_clicked)
+        self._toolbar.addWidget(download_btn)
+
         # Settings button
         self._settings_btn = QPushButton("Settings")
         self._settings_btn.setObjectName("settings_btn")
@@ -602,6 +620,95 @@ class BucketBrowserView(BaseView):
         """
         if progress_dialog:
             progress_dialog.close()
+
+    def show_save_file_dialog(self, filename: str) -> Optional[str]:
+        """Show save file dialog for downloading.
+
+        Args:
+            filename: Default filename to suggest
+
+        Returns:
+            File path selected, or None if cancelled
+        """
+        from PySide6.QtWidgets import QFileDialog
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save File", filename, "All Files (*)"
+        )
+
+        return file_path if file_path else None
+
+    def show_download_progress_dialog(self, filename: str):
+        """Show progress dialog for download.
+
+        Args:
+            filename: Name of file being downloaded (for display)
+
+        Returns:
+            QProgressDialog instance
+        """
+        from PySide6.QtWidgets import QProgressDialog
+
+        progress_dialog = QProgressDialog(
+            f"Downloading {filename}...",
+            None,
+            0,
+            100,
+            self,
+        )
+        progress_dialog.setWindowTitle("Download Progress")
+        progress_dialog.setWindowModality(Qt.WindowModality.NonModal)
+        progress_dialog.setAutoClose(False)
+        progress_dialog.setAutoReset(False)
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setValue(0)
+        progress_dialog.show()
+        progress_dialog.raise_()
+
+        return progress_dialog
+
+    def close_download_progress_dialog(self, progress_dialog) -> None:
+        """Close the download progress dialog.
+
+        Args:
+            progress_dialog: The dialog to close
+        """
+        if progress_dialog:
+            progress_dialog.close()
+
+    def _on_download_clicked(self) -> None:
+        """Handle download button click - downloads selected file."""
+        if not self._presenter:
+            return
+
+        # Get selected row
+        selected_rows = self._table.selectionModel().selectedRows()
+        if not selected_rows:
+            self.show_error("Please select a file to download")
+            return
+
+        row = selected_rows[0].row()
+
+        # Get the filename from first column
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return
+
+        filename = name_item.text()
+
+        # Check if it's a folder - don't allow downloading folders
+        is_folder = False
+        for obj in getattr(self, '_current_data', []):
+            if obj.name == filename:
+                is_folder = obj.is_folder
+                break
+
+        if is_folder:
+            self.show_error("Folders cannot be downloaded. Please select a file.")
+            return
+
+        # Call presenter to handle download
+        self._presenter.handle_download_file(filename)
 
     def show_message(self, message: str) -> None:
         """Show a message in the status bar.

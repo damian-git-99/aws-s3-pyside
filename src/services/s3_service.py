@@ -19,6 +19,7 @@ from src.services.s3_errors import (
     S3DeleteError,
     S3ObjectNotFoundError,
     S3CreateFolderError,
+    S3DownloadError,
 )
 
 
@@ -322,3 +323,63 @@ class S3FileService:
 
         except Exception as e:
             raise S3CreateFolderError(folder_name, str(e)) from e
+
+    def download_fileobj(
+        self,
+        key: str,
+        file_obj,
+        progress_callback: Optional[callable] = None
+    ) -> None:
+        """Download an object from S3 to a file-like object.
+
+        Downloads the S3 object specified by key to the provided file-like object.
+        Optionally calls a progress callback with the number of bytes transferred.
+
+        Args:
+            key: The S3 key (path) of the object to download
+            file_obj: File-like object to write to (must support write())
+            progress_callback: Optional callback function(bytes_transferred) called during download
+
+        Raises:
+            S3AccessDeniedError: If credentials lack bucket read permission
+            S3BucketNotFoundError: If bucket doesn't exist
+            S3ObjectNotFoundError: If object doesn't exist in bucket
+            S3CredentialsError: If AWS credentials are missing/invalid
+            S3ConnectionError: If cannot connect to AWS
+            S3DownloadError: If download fails for other reasons
+        """
+        try:
+            # Create a wrapper callback that tracks total bytes transferred
+            total_transferred = [0]
+            
+            def callback(bytes_amount):
+                total_transferred[0] += bytes_amount
+                if progress_callback:
+                    progress_callback(total_transferred[0])
+            
+            self._s3.download_fileobj(
+                self.bucket_name,
+                key,
+                file_obj,
+                Callback=callback
+            )
+
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            if error_code == '403' or error_code == 'AccessDenied':
+                raise S3AccessDeniedError(self.bucket_name) from e
+            elif error_code == '404' or error_code == 'NoSuchBucket':
+                raise S3BucketNotFoundError(self.bucket_name) from e
+            elif error_code == 'NoSuchKey':
+                raise S3ObjectNotFoundError(key) from e
+            else:
+                raise S3DownloadError(key, e.response.get('Error', {}).get('Message', str(e))) from e
+
+        except NoCredentialsError as e:
+            raise S3CredentialsError() from e
+
+        except EndpointConnectionError as e:
+            raise S3ConnectionError() from e
+
+        except Exception as e:
+            raise S3DownloadError(key, str(e)) from e

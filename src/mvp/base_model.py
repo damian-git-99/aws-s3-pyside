@@ -11,6 +11,8 @@ class ModelSignals(QObject):
     file_deleted = Signal(str)  # Emitted when file is deleted, carries filename
     folder_created = Signal(str)  # Emitted when folder is created, carries folder name
     folder_creation_error = Signal(str)  # Emitted when folder creation fails, carries error message
+    file_downloaded = Signal(str)  # Emitted when file is downloaded, carries filename
+    download_error = Signal(str)  # Emitted when download fails, carries error message
 
 
 class BaseModel(ABC):
@@ -48,6 +50,14 @@ class BaseModel(ABC):
     def notify_folder_creation_error(self, error_message: str) -> None:
         """Emit signal when folder creation fails."""
         self.signals.folder_creation_error.emit(error_message)
+
+    def notify_file_downloaded(self, filename: str) -> None:
+        """Emit signal when a file is downloaded."""
+        self.signals.file_downloaded.emit(filename)
+
+    def notify_download_error(self, error_message: str) -> None:
+        """Emit signal when download fails."""
+        self.signals.download_error.emit(error_message)
 
     @abstractmethod
     def load_data(self) -> None:
