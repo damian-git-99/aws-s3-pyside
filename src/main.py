@@ -4,7 +4,8 @@ import sys
 import logging
 import os
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QStyleFactory
+from PySide6.QtGui import QPalette
 
 # Configure logging to show in console
 logging.basicConfig(
@@ -81,6 +82,11 @@ def main():
     """Main application entry point."""
     # Create QApplication first (needed for dialogs)
     app = QApplication(sys.argv)
+
+    # Force light theme to prevent Windows dark mode issues
+    # Fusion style is platform-neutral and ignores OS theme
+    app.setStyle('Fusion')
+    app.setPalette(QPalette())
 
     # Apply modern styling
     apply_style(app)
