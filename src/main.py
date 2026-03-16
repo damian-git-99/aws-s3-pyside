@@ -4,7 +4,8 @@ import sys
 import logging
 import os
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QStyleFactory
+from PySide6.QtGui import QPalette, QColor
 
 # Configure logging to show in console
 logging.basicConfig(
@@ -29,6 +30,27 @@ from src.services.s3_service import S3FileService
 from src.utils.styles import apply_style
 
 
+def configure_light_palette(app):
+    """Configure application with explicit light palette to disable dark mode."""
+    app.setStyle('Fusion')
+    
+    # Force light palette with explicit colors
+    palette = app.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(240, 240, 240))
+    palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.black)
+    palette.setColor(QPalette.ColorRole.Base, QColor(255, 255, 255))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(233, 233, 233))
+    palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.black)
+    palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.black)
+    palette.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))
+    palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.black)
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))
+    palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.white)
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 220))
+    palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.black)
+    app.setPalette(palette)
+
+
 def show_config_error(missing_vars):
     """Show error dialog for missing configuration.
     
@@ -36,6 +58,7 @@ def show_config_error(missing_vars):
         missing_vars: List of missing environment variable names
     """
     app = QApplication(sys.argv)
+    configure_light_palette(app)
     
     error_msg = (
         "<h3>Configuration Error</h3>"
@@ -81,6 +104,9 @@ def main():
     """Main application entry point."""
     # Create QApplication first (needed for dialogs)
     app = QApplication(sys.argv)
+
+    # Force light theme to prevent Windows dark mode issues
+    configure_light_palette(app)
 
     # Apply modern styling
     apply_style(app)
