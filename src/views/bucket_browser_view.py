@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QStackedLayout,
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
@@ -44,6 +45,8 @@ class BucketBrowserView(BaseView):
         self._breadcrumb_actions: List[QAction] = []
         self._header_container: Optional[QWidget] = None
         self._breadcrumb_container: Optional[QWidget] = None
+        self._content_container: Optional[QWidget] = None
+        self._stacked_layout: Optional[QStackedLayout] = None
         self._on_settings_callback: Optional[callable] = None
         self.setup_ui()
 
@@ -67,10 +70,10 @@ class BucketBrowserView(BaseView):
         if self._header_container:
             layout.addWidget(self._header_container)
 
-        # Table
-        self._setup_table()
-        if self._table:
-            layout.addWidget(self._table)
+        # Content container with stacked layout (table + empty state)
+        self._setup_content_container()
+        if self._content_container:
+            layout.addWidget(self._content_container)
 
         # Status bar
         self._status_label = QLabel("Ready")
@@ -193,6 +196,64 @@ class BucketBrowserView(BaseView):
         if self._toolbar:
             header_layout.addWidget(self._toolbar)
 
+    def _setup_content_container(self) -> None:
+        """Setup the content container with stacked layout for table and empty state."""
+        # First setup the table
+        self._setup_table()
+
+        # Create content container
+        self._content_container = QWidget()
+        self._content_container.setObjectName("content_container")
+
+        # Create stacked layout
+        self._stacked_layout = QStackedLayout(self._content_container)
+        self._stacked_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create empty state widget
+        empty_state_widget = self._create_empty_state_widget()
+
+        # Add widgets to stacked layout: index 0 = table, index 1 = empty state
+        self._stacked_layout.addWidget(self._table)
+        self._stacked_layout.addWidget(empty_state_widget)
+
+        # Set initial state: show table (index 0)
+        self._stacked_layout.setCurrentIndex(0)
+
+    def _create_empty_state_widget(self) -> QWidget:
+        """Create a properly styled empty state widget."""
+        widget = QWidget()
+        widget.setObjectName("empty_state_widget")
+
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon_label = QLabel("📁")
+        icon_label.setObjectName("empty_state_icon")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet("font-size: 64px;")
+
+        title_label = QLabel("No files in this folder")
+        title_label.setObjectName("empty_state_title")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_font = title_label.font()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setStyleSheet("color: #333333;")
+
+        description_label = QLabel("Upload files or create folders to see them here")
+        description_label.setObjectName("empty_state_description")
+        description_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        description_label.setStyleSheet("color: #666666; font-size: 13px;")
+
+        layout.addWidget(icon_label)
+        layout.addWidget(title_label)
+        layout.addWidget(description_label)
+
+        return widget
+
     def _setup_menu_bar(self) -> None:
         """Setup the menu bar."""
         self._menu_bar = QMenuBar()
@@ -243,14 +304,15 @@ class BucketBrowserView(BaseView):
             data: List of BucketObject instances to display
         """
         self._current_data = data
-        # Show empty state message if no data
+
+        # Show empty state or table based on data
         if not data:
-            self._show_empty_state(True)
+            self._stacked_layout.setCurrentIndex(1)  # Show empty state
             self._table.setRowCount(0)
             self._update_status(0)
             return
 
-        self._show_empty_state(False)
+        self._stacked_layout.setCurrentIndex(0)  # Show table
         self._table.setRowCount(len(data))
 
         for row, obj in enumerate(data):
