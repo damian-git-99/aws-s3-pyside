@@ -40,3 +40,7 @@ uv run python -m unittest discover src/tests/
 ✅ Model emite señales Qt  
 ✅ Presenter testeable sin Qt  
 ✅ Todo en `src/` con prefijo `src.`
+
+## OpenSpec Workflow
+
+Al usar `/opsx-archive`: recordar sincronizar también con las specs generales (ver formato en algun file de `openspec/specs/`).
