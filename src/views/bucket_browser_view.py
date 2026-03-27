@@ -19,7 +19,13 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import (
+    QAction,
+    QDragEnterEvent,
+    QDropEvent,
+    QDragMoveEvent,
+    QDragLeaveEvent,
+)
 
 from src.mvp.base_view import BaseView
 from src.models.bucket_object import BucketObject
@@ -48,6 +54,10 @@ class BucketBrowserView(BaseView):
         self._content_container: Optional[QWidget] = None
         self._stacked_layout: Optional[QStackedLayout] = None
         self._on_settings_callback: Optional[callable] = None
+
+        # Enable drag and drop EARLY
+        self.setAcceptDrops(True)
+
         self.setup_ui()
 
     def setup_ui(self) -> None:
@@ -80,6 +90,60 @@ class BucketBrowserView(BaseView):
         layout.addWidget(self._status_label)
 
         self.setLayout(layout)
+
+    def set_drop_highlight(self) -> None:
+        """Show visual highlight indicating valid drop zone."""
+        self.setStyleSheet("QWidget { border: 3px solid #3498db; }")
+
+    def clear_drop_highlight(self) -> None:
+        """Clear visual highlight when drag exits."""
+        self.setStyleSheet("")
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Handle drag enter event.
+
+        Args:
+            event: The drag enter event
+        """
+        event.acceptProposedAction()
+        self.set_drop_highlight()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        """Handle drag move event.
+
+        Args:
+            event: The drag move event
+        """
+        if self._presenter:
+            is_valid = self._presenter.on_drag_move(event)
+            if is_valid:
+                event.acceptProposedAction()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
+        """Handle drag leave event.
+
+        Args:
+            event: The drag leave event
+        """
+        self.clear_drop_highlight()
+        if self._presenter:
+            self._presenter.on_drag_leave()
+        event.accept()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        """Handle drop event.
+
+        Args:
+            event: The drop event
+        """
+        self.clear_drop_highlight()
+        if self._presenter:
+            self._presenter.on_files_dropped(event)
+        event.accept()
 
     def _setup_toolbar(self) -> None:
         """Setup the toolbar with action buttons."""
@@ -172,14 +236,14 @@ class BucketBrowserView(BaseView):
         header_layout = QVBoxLayout(self._header_container)
         header_layout.setSpacing(8)
         header_layout.setContentsMargins(8, 8, 8, 8)
-        
+
         # Breadcrumb row
         self._breadcrumb_container = QWidget()
         self._breadcrumb_container.setObjectName("breadcrumb_container")
         breadcrumb_row_layout = QHBoxLayout(self._breadcrumb_container)
         breadcrumb_row_layout.setContentsMargins(0, 0, 0, 0)
         breadcrumb_row_layout.setSpacing(4)
-        
+
         # Breadcrumb widget
         self._breadcrumb_widget = QWidget()
         self._breadcrumb_widget.setObjectName("breadcrumb_widget")
@@ -188,9 +252,9 @@ class BucketBrowserView(BaseView):
         self._breadcrumb_layout.addStretch()
         breadcrumb_row_layout.addWidget(self._breadcrumb_widget)
         breadcrumb_row_layout.addStretch()
-        
+
         header_layout.addWidget(self._breadcrumb_container)
-        
+
         # Toolbar row
         self._setup_toolbar()
         if self._toolbar:
@@ -204,6 +268,9 @@ class BucketBrowserView(BaseView):
         # Create content container
         self._content_container = QWidget()
         self._content_container.setObjectName("content_container")
+
+        # Enable drag and drop on content container
+        self._content_container.setAcceptDrops(True)
 
         # Create stacked layout
         self._stacked_layout = QStackedLayout(self._content_container)
@@ -332,7 +399,7 @@ class BucketBrowserView(BaseView):
             modified_item = QTableWidgetItem()
             modified_item.setText(obj.last_modified.strftime("%Y-%m-%d %H:%M"))
             self._table.setItem(row, 2, modified_item)
- 
+
             # Storage Class column
             storage_item = QTableWidgetItem()
             storage_item.setText(obj.storage_class)
@@ -360,33 +427,33 @@ class BucketBrowserView(BaseView):
         """Handle delete button click - deletes selected file/folder."""
         if not self._presenter:
             return
-        
+
         # Get selected row
         selected_rows = self._table.selectionModel().selectedRows()
         if not selected_rows:
             self.show_error("No file selected. Please select a file to delete.")
             return
-        
+
         row = selected_rows[0].row()
-        
+
         # Get the filename from first column
         name_item = self._table.item(row, 0)
         if not name_item:
             return
-        
+
         filename = name_item.text()
-        
+
         # Check if it's a folder - don't allow deleting folders
         is_folder = False
-        for obj in getattr(self, '_current_data', []):
+        for obj in getattr(self, "_current_data", []):
             if obj.name == filename:
                 is_folder = obj.is_folder
                 break
-        
+
         if is_folder:
             self.show_error("Cannot delete folders. Only files can be deleted.")
             return
-        
+
         # Call presenter to handle deletion
         self._presenter.handle_delete_file(filename)
 
@@ -538,7 +605,7 @@ class BucketBrowserView(BaseView):
 
     def set_on_settings_callback(self, callback: callable) -> None:
         """Set callback for Settings button click.
-        
+
         Args:
             callback: Function to call when Settings button is clicked
         """
@@ -760,7 +827,7 @@ class BucketBrowserView(BaseView):
 
         # Check if it's a folder - don't allow downloading folders
         is_folder = False
-        for obj in getattr(self, '_current_data', []):
+        for obj in getattr(self, "_current_data", []):
             if obj.name == filename:
                 is_folder = obj.is_folder
                 break
@@ -824,7 +891,9 @@ class CreateFolderDialog(QDialog):
 
         # Buttons
         button_box = QDialogButtonBox()
-        create_button = button_box.addButton("Create", QDialogButtonBox.ButtonRole.AcceptRole)
+        create_button = button_box.addButton(
+            "Create", QDialogButtonBox.ButtonRole.AcceptRole
+        )
         cancel_button = button_box.addButton(QDialogButtonBox.StandardButton.Cancel)
         create_button.clicked.connect(self._on_accepted)
         cancel_button.clicked.connect(self.reject)
@@ -849,7 +918,7 @@ class CreateFolderDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Invalid Name",
-                f"Folder name cannot contain any of these characters: {invalid_chars}"
+                f"Folder name cannot contain any of these characters: {invalid_chars}",
             )
             return
 

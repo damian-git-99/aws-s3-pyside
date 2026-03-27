@@ -22,15 +22,15 @@ logger = logging.getLogger(__name__)
 
 class ProgressFileReader:
     """File wrapper that tracks read progress and emits updates via Qt signal."""
-    
+
     def __init__(self, file_path: str, progress_signal):
-        self._file = open(file_path, 'rb')
+        self._file = open(file_path, "rb")
         self._size = os.path.getsize(file_path)
         self._read = 0
         self._progress_signal = progress_signal
         self._last_percentage = -1
         self.name = os.path.basename(file_path)
-    
+
     def read(self, size=-1):
         data = self._file.read(size)
         self._read += len(data)
@@ -39,17 +39,17 @@ class ProgressFileReader:
             self._last_percentage = percentage
             self._progress_signal.emit(percentage)
         return data
-    
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, *args):
         self._file.close()
 
 
 class UploadWorker(QThread):
     """Worker thread for uploading files to S3.
-    
+
     Signals:
         progress: Emitted with percentage (0-100) during upload
         finished: Emitted when upload completes successfully
@@ -74,8 +74,7 @@ class UploadWorker(QThread):
         try:
             with ProgressFileReader(self._file_path, self.progress) as f:
                 self._s3_service.upload_fileobj_to_prefix(
-                    file_obj=f,
-                    prefix=self._prefix
+                    file_obj=f, prefix=self._prefix
                 )
             if not self._cancelled:
                 self.finished.emit()
@@ -102,11 +101,7 @@ class DownloadWorker(QThread):
     error = Signal(str)
 
     def __init__(
-        self,
-        s3_service: S3FileService,
-        key: str,
-        file_path: str,
-        file_size: int = 0
+        self, s3_service: S3FileService, key: str, file_path: str, file_size: int = 0
     ):
         super().__init__()
         self._s3_service = s3_service
@@ -129,11 +124,9 @@ class DownloadWorker(QThread):
                         self.progress.emit(percentage)
 
             # Open file for writing in binary mode
-            with open(self._file_path, 'wb') as f:
+            with open(self._file_path, "wb") as f:
                 self._s3_service.download_fileobj(
-                    key=self._key,
-                    file_obj=f,
-                    progress_callback=progress_callback
+                    key=self._key, file_obj=f, progress_callback=progress_callback
                 )
 
             if not self._cancelled:
@@ -189,14 +182,16 @@ class BucketBrowserPresenter(BasePresenter):
         else:
             self._bucket_name = "Bucket"
             logger.debug("Initialize: No S3 service, using mock")
-        
+
         logger.debug("Initialize: connecting model signals")
         # Connect model signals
         self._model.signals.file_deleted.connect(self._on_file_deleted)
         self._model.signals.error_occurred.connect(self._on_model_error)
         self._model.signals.folder_created.connect(self._on_folder_created)
-        self._model.signals.folder_creation_error.connect(self._on_folder_creation_error)
-        
+        self._model.signals.folder_creation_error.connect(
+            self._on_folder_creation_error
+        )
+
         logger.debug("Initialize: loading bucket contents")
         self._load_bucket_contents()
         logger.debug("Initialize: complete")
@@ -267,12 +262,14 @@ class BucketBrowserPresenter(BasePresenter):
 
     def on_item_double_clicked(self, object_name: str, is_folder: bool) -> None:
         """Handle double-click on a table item.
-        
+
         Args:
             object_name: Name of the clicked object
             is_folder: Whether the object is a folder
         """
-        logger.debug(f"on_item_double_clicked: object={object_name}, is_folder={is_folder}")
+        logger.debug(
+            f"on_item_double_clicked: object={object_name}, is_folder={is_folder}"
+        )
         if is_folder:
             logger.debug(f"Navigating to folder: {object_name}")
             self.navigate_to_folder(object_name)
@@ -434,11 +431,143 @@ class BucketBrowserPresenter(BasePresenter):
         if self._upload_worker:
             self._upload_worker = None
 
+    def on_drag_enter(self, event) -> bool:
+        """Handle drag enter event for validation.
+
+        Args:
+            event: The drag enter event
+
+        Returns:
+            True if drop is valid (single file), False otherwise
+        """
+        mime_data = event.mimeData()
+
+        if not mime_data:
+            return False
+
+        # Check if it has URLs (files from file manager)
+        if not mime_data.hasUrls():
+            return False
+
+        urls = mime_data.urls()
+
+        if not urls:
+            return False
+
+        # Accept only single file (no folders, no multiple files)
+        if len(urls) != 1:
+            logger.info(
+                f"Drag-drop rejected: {len(urls)} items (only single file supported)"
+            )
+            return False
+
+        url = urls[0]
+
+        # Check if it's a local file (not a web URL)
+        if not url.isLocalFile():
+            return False
+
+        file_path = url.toLocalFile()
+
+        # Check it's actually a file, not a directory
+        import os
+
+        if not os.path.isfile(file_path):
+            logger.info(f"Drag-drop rejected: not a file (is directory or invalid)")
+            return False
+
+        logger.debug(f"Drag-drop validated: {file_path}")
+        return True
+
+    def on_drag_move(self, event) -> bool:
+        """Handle drag move event.
+
+        Args:
+            event: The drag move event
+
+        Returns:
+            True if drop is valid, False otherwise
+        """
+        # Reuse validation from dragEnter
+        return self.on_drag_enter(event)
+
+    def on_drag_leave(self) -> None:
+        """Handle drag leave event."""
+        logger.debug("Drag leave event")
+        pass
+
+    def on_files_dropped(self, event) -> None:
+        """Handle dropped files.
+
+        Args:
+            event: The drop event
+        """
+        if not self._s3_service:
+            self._view.show_error("Upload not available in mock mode")
+            return
+
+        mime_data = event.mimeData()
+        if not mime_data or not mime_data.hasUrls():
+            return
+
+        urls = mime_data.urls()
+        if len(urls) != 1:
+            QMessageBox.warning(
+                self._view,
+                "Invalid Drop",
+                "Only single file uploads are supported. Please drop one file at a time.",
+            )
+            return
+
+        url = urls[0]
+        if not url.isLocalFile():
+            return
+
+        file_path = url.toLocalFile()
+
+        # Validate it's a file
+        import os
+
+        if not os.path.isfile(file_path):
+            QMessageBox.warning(
+                self._view,
+                "Invalid Drop",
+                "Folders cannot be uploaded. Please drop a file.",
+            )
+            return
+
+        logger.info(f"Starting drag-drop upload: {file_path}")
+
+        # Cancel any existing upload
+        if self._upload_worker and self._upload_worker.isRunning():
+            self._upload_worker.cancel()
+            self._upload_worker.wait()
+
+        # Create progress dialog
+        progress_dialog = self._view.show_upload_progress_dialog(file_path)
+
+        # Create and configure worker
+        self._upload_worker = UploadWorker(
+            self._s3_service, file_path, self._current_prefix
+        )
+
+        # Connect signals
+        self._upload_worker.progress.connect(progress_dialog.setValue)
+        self._upload_worker.finished.connect(
+            lambda: self._on_upload_finished(progress_dialog)
+        )
+        self._upload_worker.error.connect(
+            lambda err: self._on_upload_error(err, progress_dialog)
+        )
+
+        # Start upload
+        self._upload_worker.start()
+
     def handle_delete_file(self, filename: str) -> None:
         """Handle file deletion request from view.
-        
+
         Shows a confirmation dialog and deletes the file if user confirms.
-        
+
         Args:
             filename: Name of the file to delete (display name, not full key)
         """
@@ -448,18 +577,18 @@ class BucketBrowserPresenter(BasePresenter):
             "Confirm Deletion",
             f"Are you sure you want to delete '{filename}'?\n\nThis action cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No  # Default to No (safest choice)
+            QMessageBox.No,  # Default to No (safest choice)
         )
-        
+
         if reply == QMessageBox.No:
             return  # User cancelled
-        
+
         # Construct the full S3 key (path) for deletion
         if self._current_prefix:
             key = f"{self._current_prefix}{filename}"
         else:
             key = filename
-        
+
         # Call model to delete the file
         try:
             self._model.delete_file(key)
@@ -468,7 +597,7 @@ class BucketBrowserPresenter(BasePresenter):
 
     def _on_file_deleted(self, filename: str) -> None:
         """Handle successful file deletion from model.
-        
+
         Args:
             filename: Name of the deleted file
         """
@@ -481,31 +610,31 @@ class BucketBrowserPresenter(BasePresenter):
         if not self._s3_service:
             self._view.show_error("Create folder not available in mock mode")
             return
-        
+
         # Show dialog and get folder name
         folder_name = self._view.show_create_folder_dialog()
         if not folder_name:
             return  # User cancelled
-        
+
         # Create folder via model
         try:
             self._model.create_folder(self._current_prefix, folder_name)
         except Exception as e:
             self._view.show_error(f"Error creating folder: {str(e)}")
-    
+
     def _on_folder_created(self, folder_name: str) -> None:
         """Handle successful folder creation from model.
-        
+
         Args:
             folder_name: Name of the created folder
         """
         self._view.show_message(f"Folder '{folder_name}' created successfully")
         # Refresh the file list to show new folder
         self.on_refresh_clicked()
-    
+
     def _on_folder_creation_error(self, error_message: str) -> None:
         """Handle folder creation error from model.
-        
+
         Args:
             error_message: Error description
         """
@@ -596,7 +725,7 @@ class BucketBrowserPresenter(BasePresenter):
         self._view.close_download_progress_dialog(progress_dialog)
         self._view.show_error_with_retry(
             f"Download failed: {error_message}",
-            on_retry=lambda: None  # Retry handled by view re-calling handler
+            on_retry=lambda: None,  # Retry handled by view re-calling handler
         )
         if self._download_worker:
             self._download_worker = None
