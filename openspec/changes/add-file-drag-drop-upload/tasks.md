@@ -38,13 +38,13 @@
 
 ## 6. Testing
 
-- [ ] 6.1 Create unit tests for drop validation methods in presenter
-- [ ] 6.2 Create unit tests for MIME data parsing and file path extraction
-- [ ] 6.3 Create manual test cases for single file upload via drag-drop
-- [ ] 6.4 Create manual test cases for invalid drops (multiple files, folders)
-- [ ] 6.5 Test upload progress dialog appears and updates during drag-drop upload
-- [ ] 6.6 Test error handling for network failures during drag-drop upload
-- [ ] 6.7 Test drag-drop works in both root and subfolder contexts
+- [x] 6.1 Create unit tests for drop validation methods in presenter
+- [x] 6.2 Create unit tests for MIME data parsing and file path extraction
+- [x] 6.3 Create manual test cases for single file upload via drag-drop
+- [x] 6.4 Create manual test cases for invalid drops (multiple files, folders)
+- [x] 6.5 Test upload progress dialog appears and updates during drag-drop upload
+- [x] 6.6 Test error handling for network failures during drag-drop upload
+- [x] 6.7 Test drag-drop works in both root and subfolder contexts
 
 ## 7. Integration and Documentation
 
