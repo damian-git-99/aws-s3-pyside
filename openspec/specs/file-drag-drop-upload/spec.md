@@ -3,7 +3,7 @@
 ## Purpose
 Allow users to upload files to S3 buckets using drag-and-drop operations directly onto the file browser view, complementing the existing file picker upload method.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: User can drag and drop a file to upload
 The system SHALL accept a single file dropped onto the file browser area and upload it to the current folder with progress tracking, identical to file picker uploads.
@@ -76,8 +76,6 @@ The system SHALL provide identical progress tracking for drag-drop uploads as fi
 - **THEN** the progress dialog SHALL close
 - **AND** an error message SHALL be displayed
 - **AND** the user SHALL be given the option to retry
-
-## MODIFIED Requirements
 
 ### Requirement: File browser accepts drops
 The file browser view SHALL accept drag-and-drop operations in addition to existing file picker interactions.
