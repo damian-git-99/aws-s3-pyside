@@ -1,4 +1,5 @@
 from typing import List, Optional, Tuple
+from io import BytesIO
 import os
 import logging
 
@@ -15,6 +16,7 @@ from src.services.s3_errors import (
     S3BucketNotFoundError,
     S3ConnectionError,
     S3CredentialsError,
+    S3ObjectNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -714,6 +716,54 @@ class BucketBrowserPresenter(BasePresenter):
         self._view.show_message(f"File '{filename}' downloaded successfully")
         if self._download_worker:
             self._download_worker = None
+
+    def handle_preview_request(self, filename: str) -> None:
+        """Handle image preview request from view.
+
+        Downloads the image from S3 to memory and displays it in a preview dialog.
+
+        Args:
+            filename: Name of the image file to preview
+        """
+        if not self._s3_service:
+            self._view.show_error("Preview not available in mock mode")
+            return
+
+        # Construct the full S3 key (path) for the image
+        if self._current_prefix:
+            key = f"{self._current_prefix}{filename}"
+        else:
+            key = filename
+
+        logger.debug(f"Preview requested for: {key}")
+
+        # Show loading state
+        self._view.show_loading(True)
+
+        try:
+            # Download image to memory
+            buffer = BytesIO()
+            self._s3_service.download_fileobj(key, buffer)
+            buffer.seek(0)
+            image_data = buffer.getvalue()
+
+            # Show preview dialog
+            self._view.show_image_preview(image_data, filename)
+
+        except S3AccessDeniedError as e:
+            logger.error(f"Access denied for preview: {e}")
+            self._view.show_error(f"Access denied: Unable to preview '{filename}'")
+        except S3ObjectNotFoundError as e:
+            logger.error(f"Object not found for preview: {e}")
+            self._view.show_error(f"File not found: '{filename}'")
+        except S3ConnectionError as e:
+            logger.error(f"Connection error for preview: {e}")
+            self._view.show_error(f"Connection error: Unable to download '{filename}'")
+        except Exception as e:
+            logger.error(f"Error previewing image: {e}", exc_info=True)
+            self._view.show_error(f"Failed to preview '{filename}': {str(e)}")
+        finally:
+            self._view.show_loading(False)
 
     def _on_download_error(self, error_message: str, progress_dialog) -> None:
         """Handle download error.

@@ -30,6 +30,7 @@ from PySide6.QtGui import (
 from src.mvp.base_view import BaseView
 from src.models.bucket_object import BucketObject
 from src.utils.file_icons import FileIconManager
+from src.views.image_preview_dialog import ImagePreviewDialog
 
 
 class BucketBrowserView(BaseView):
@@ -54,6 +55,7 @@ class BucketBrowserView(BaseView):
         self._content_container: Optional[QWidget] = None
         self._stacked_layout: Optional[QStackedLayout] = None
         self._on_settings_callback: Optional[callable] = None
+        self._preview_btn: Optional[QPushButton] = None
 
         # Enable drag and drop EARLY
         self.setAcceptDrops(True)
@@ -188,7 +190,8 @@ class BucketBrowserView(BaseView):
         delete_btn = QPushButton("Delete")
         delete_btn.setObjectName("delete_btn")
         delete_btn.setFixedSize(80, 28)
-        delete_btn.setStyleSheet("""
+        delete_btn.setStyleSheet(
+            """
             QPushButton {
                 background-color: #e74c3c;
                 color: white;
@@ -198,7 +201,8 @@ class BucketBrowserView(BaseView):
             QPushButton:hover {
                 background-color: #c0392b;
             }
-        """)
+        """
+        )
         delete_btn.clicked.connect(self._on_delete_selected_clicked)
         self._toolbar.addWidget(delete_btn)
 
@@ -206,7 +210,8 @@ class BucketBrowserView(BaseView):
         download_btn = QPushButton("Download")
         download_btn.setObjectName("download_btn")
         download_btn.setFixedSize(100, 28)
-        download_btn.setStyleSheet("""
+        download_btn.setStyleSheet(
+            """
             QPushButton {
                 background-color: #3498db;
                 color: white;
@@ -216,9 +221,35 @@ class BucketBrowserView(BaseView):
             QPushButton:hover {
                 background-color: #2980b9;
             }
-        """)
+        """
+        )
         download_btn.clicked.connect(self._on_download_clicked)
         self._toolbar.addWidget(download_btn)
+
+        # Preview button - shows preview for selected image file
+        self._preview_btn = QPushButton("Preview")
+        self._preview_btn.setObjectName("preview_btn")
+        self._preview_btn.setFixedSize(80, 28)
+        self._preview_btn.setEnabled(False)  # Disabled by default
+        self._preview_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #9b59b6;
+                color: white;
+                border: none;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #8e44ad;
+            }
+            QPushButton:disabled {
+                background-color: #bdc3c7;
+                color: #7f8c8d;
+            }
+        """
+        )
+        self._preview_btn.clicked.connect(self._on_preview_clicked)
+        self._toolbar.addWidget(self._preview_btn)
 
         # Settings button
         self._settings_btn = QPushButton("Settings")
@@ -363,6 +394,74 @@ class BucketBrowserView(BaseView):
 
         # Connect double-click signal
         self._table.cellDoubleClicked.connect(self._on_table_double_clicked)
+
+        # Connect selection change signal for preview button
+        self._table.itemSelectionChanged.connect(self._on_selection_changed)
+
+    def _on_selection_changed(self) -> None:
+        """Handle table selection change to update preview button state."""
+        is_image = self._is_image_selected()
+        self.enable_preview_button(is_image)
+
+    def _is_image_selected(self) -> bool:
+        """Check if currently selected item is an image file.
+
+        Returns:
+            True if selected item is an image, False otherwise
+        """
+        selected_rows = self._table.selectionModel().selectedRows()
+        if not selected_rows:
+            return False
+
+        row = selected_rows[0].row()
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return False
+
+        filename = name_item.text()
+
+        # Check if it's an image by looking at the current data
+        for obj in getattr(self, "_current_data", []):
+            if obj.name == filename:
+                return obj.get_icon_type() == "image"
+
+        return False
+
+    def enable_preview_button(self, enabled: bool) -> None:
+        """Enable or disable the preview button.
+
+        Args:
+            enabled: True to enable button, False to disable
+        """
+        if self._preview_btn:
+            self._preview_btn.setEnabled(enabled)
+
+    def _on_preview_clicked(self) -> None:
+        """Handle preview button click."""
+        if not self._presenter:
+            return
+
+        selected_rows = self._table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+
+        row = selected_rows[0].row()
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return
+
+        filename = name_item.text()
+        self._presenter.handle_preview_request(filename)
+
+    def show_image_preview(self, image_data: bytes, filename: str) -> None:
+        """Show image preview dialog.
+
+        Args:
+            image_data: Raw image bytes
+            filename: Name of the image file
+        """
+        dialog = ImagePreviewDialog(image_data, filename, self)
+        dialog.exec()
 
     def display_data(self, data: List[BucketObject]) -> None:
         """Display bucket objects in the table.
