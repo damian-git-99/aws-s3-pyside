@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QDialogButtonBox,
     QMessageBox,
+    QSizePolicy,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import (
@@ -56,6 +57,8 @@ class BucketBrowserView(BaseView):
         self._stacked_layout: Optional[QStackedLayout] = None
         self._on_settings_callback: Optional[callable] = None
         self._preview_btn: Optional[QPushButton] = None
+        self._search_input: Optional[QLineEdit] = None
+        self._on_search_callback: Optional[callable] = None
 
         # Enable drag and drop EARLY
         self.setAcceptDrops(True)
@@ -256,6 +259,32 @@ class BucketBrowserView(BaseView):
         self._settings_btn.setObjectName("settings_btn")
         self._settings_btn.clicked.connect(self._on_settings_clicked)
         self._toolbar.addWidget(self._settings_btn)
+
+        # Spacer before search
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._toolbar.addWidget(spacer)
+
+        # Search input field
+        self._search_input = QLineEdit()
+        self._search_input.setObjectName("search_input")
+        self._search_input.setPlaceholderText("Search files...")
+        self._search_input.setFixedWidth(200)
+        self._search_input.setStyleSheet(
+            """
+            QLineEdit {
+                padding: 4px 8px;
+                border: 1px solid #cccccc;
+                border-radius: 3px;
+                background-color: white;
+            }
+            QLineEdit:focus {
+                border: 1px solid #3498db;
+            }
+        """
+        )
+        self._search_input.textChanged.connect(self._on_search_text_changed)
+        self._toolbar.addWidget(self._search_input)
 
         # Disable navigation buttons initially (at root)
         self.enable_navigation_buttons(can_go_up=False)
@@ -967,6 +996,23 @@ class BucketBrowserView(BaseView):
             return dialog.get_folder_name()
         return None
 
+    def _on_search_text_changed(self, text: str) -> None:
+        """Handle search text changes.
+
+        Args:
+            text: The current search text
+        """
+        if self._on_search_callback:
+            self._on_search_callback(text)
+
+    def set_on_search_callback(self, callback: callable) -> None:
+        """Set callback for search text changes.
+
+        Args:
+            callback: Function to call when search text changes
+        """
+        self._on_search_callback = callback
+
 
 class CreateFolderDialog(QDialog):
     """Dialog for creating a new folder."""
@@ -1026,3 +1072,20 @@ class CreateFolderDialog(QDialog):
     def get_folder_name(self) -> str:
         """Return the folder name entered by user."""
         return self._name_input.text().strip()
+
+    def _on_search_text_changed(self, text: str) -> None:
+        """Handle search text changes.
+
+        Args:
+            text: The current search text
+        """
+        if self._on_search_callback:
+            self._on_search_callback(text)
+
+    def set_on_search_callback(self, callback: callable) -> None:
+        """Set callback for search text changes.
+
+        Args:
+            callback: Function to call when search text changes
+        """
+        self._on_search_callback = callback

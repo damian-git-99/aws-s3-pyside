@@ -3,7 +3,7 @@ from io import BytesIO
 import os
 import logging
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtWidgets import QMessageBox
 
 from src.mvp.base_presenter import BasePresenter
@@ -171,6 +171,8 @@ class BucketBrowserPresenter(BasePresenter):
         self._bucket_name: str = ""
         self._upload_worker: Optional[UploadWorker] = None
         self._download_worker: Optional[DownloadWorker] = None
+        self._search_query: str = ""
+        self._search_timer: Optional[QTimer] = None
 
     def initialize(self) -> None:
         """Initialize the presenter and load initial data."""
@@ -193,6 +195,14 @@ class BucketBrowserPresenter(BasePresenter):
         self._model.signals.folder_creation_error.connect(
             self._on_folder_creation_error
         )
+
+        # Setup search timer for debounce
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.timeout.connect(self._apply_search_filter)
+
+        # Connect view search callback
+        self._view.set_on_search_callback(self.on_search_text_changed)
 
         logger.debug("Initialize: loading bucket contents")
         self._load_bucket_contents()
@@ -222,6 +232,7 @@ class BucketBrowserPresenter(BasePresenter):
         self._continuation_token = None
         self._is_truncated = False
         self._all_objects = []
+        self._search_query = ""
         self._load_bucket_contents()
 
     def navigate_up(self) -> None:
@@ -378,7 +389,31 @@ class BucketBrowserPresenter(BasePresenter):
         self._continuation_token = None
         self._is_truncated = False
         self._all_objects = []
+        self._search_query = ""
         self._load_bucket_contents(append=False)
+
+    def on_search_text_changed(self, text: str) -> None:
+        """Handle search text changes with debounce.
+
+        Args:
+            text: The search text from the view
+        """
+        self._search_query = text
+        # Restart timer for debounce (300ms)
+        self._search_timer.start(300)
+
+    def _apply_search_filter(self) -> None:
+        """Apply the search filter to displayed objects."""
+        if not self._search_query:
+            # Show all objects when search is empty
+            self._view.display_data(self._all_objects)
+        else:
+            # Filter objects by name (case-insensitive partial match)
+            search_lower = self._search_query.lower()
+            filtered = [
+                obj for obj in self._all_objects if search_lower in obj.name.lower()
+            ]
+            self._view.display_data(filtered)
 
     def on_upload_clicked(self) -> None:
         """Handle upload button click."""
