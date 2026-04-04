@@ -32,6 +32,7 @@ from src.mvp.base_view import BaseView
 from src.models.bucket_object import BucketObject
 from src.utils.file_icons import FileIconManager
 from src.views.image_preview_dialog import ImagePreviewDialog
+from src.views.generate_link_dialog import GenerateLinkDialog
 
 
 class BucketBrowserView(BaseView):
@@ -57,6 +58,7 @@ class BucketBrowserView(BaseView):
         self._stacked_layout: Optional[QStackedLayout] = None
         self._on_settings_callback: Optional[callable] = None
         self._preview_btn: Optional[QPushButton] = None
+        self._generate_link_btn: Optional[QPushButton] = None
         self._search_input: Optional[QLineEdit] = None
         self._on_search_callback: Optional[callable] = None
 
@@ -254,6 +256,31 @@ class BucketBrowserView(BaseView):
         self._preview_btn.clicked.connect(self._on_preview_clicked)
         self._toolbar.addWidget(self._preview_btn)
 
+        # Generate Link button - creates pre-signed URL for selected file
+        self._generate_link_btn = QPushButton("Generate Link")
+        self._generate_link_btn.setObjectName("generate_link_btn")
+        self._generate_link_btn.setFixedSize(100, 28)
+        self._generate_link_btn.setEnabled(False)
+        self._generate_link_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #f39c12;
+                color: white;
+                border: none;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #e67e22;
+            }
+            QPushButton:disabled {
+                background-color: #bdc3c7;
+                color: #7f8c8d;
+            }
+        """
+        )
+        self._generate_link_btn.clicked.connect(self._on_generate_link_clicked)
+        self._toolbar.addWidget(self._generate_link_btn)
+
         # Settings button
         self._settings_btn = QPushButton("Settings")
         self._settings_btn.setObjectName("settings_btn")
@@ -429,8 +456,26 @@ class BucketBrowserView(BaseView):
 
     def _on_selection_changed(self) -> None:
         """Handle table selection change to update preview button state."""
-        is_image = self._is_image_selected()
-        self.enable_preview_button(is_image)
+        selected_rows = self._table.selectionModel().selectedRows()
+        if not selected_rows:
+            self.enable_preview_button(False)
+            self.enable_generate_link_button(False)
+            return
+
+        row = selected_rows[0].row()
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return
+
+        filename = name_item.text()
+
+        for obj in getattr(self, "_current_data", []):
+            if obj.name == filename:
+                is_image = obj.get_icon_type() == "image"
+                is_folder = obj.is_folder
+                self.enable_preview_button(is_image and not is_folder)
+                self.enable_generate_link_button(not is_folder)
+                break
 
     def _is_image_selected(self) -> bool:
         """Check if currently selected item is an image file.
@@ -465,6 +510,11 @@ class BucketBrowserView(BaseView):
         if self._preview_btn:
             self._preview_btn.setEnabled(enabled)
 
+    def enable_generate_link_button(self, enabled: bool) -> None:
+        """Enable or disable the generate link button."""
+        if self._generate_link_btn:
+            self._generate_link_btn.setEnabled(enabled)
+
     def _on_preview_clicked(self) -> None:
         """Handle preview button click."""
         if not self._presenter:
@@ -481,6 +531,35 @@ class BucketBrowserView(BaseView):
 
         filename = name_item.text()
         self._presenter.handle_preview_request(filename)
+
+    def _on_generate_link_clicked(self) -> None:
+        """Handle Generate Link button click."""
+        if not self._presenter:
+            return
+
+        selected_rows = self._table.selectionModel().selectedRows()
+        if not selected_rows:
+            self.show_error("Please select a file first")
+            return
+
+        row = selected_rows[0].row()
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return
+
+        filename = name_item.text()
+
+        is_folder = False
+        for obj in getattr(self, "_current_data", []):
+            if obj.name == filename:
+                is_folder = obj.is_folder
+                break
+
+        if is_folder:
+            self.show_error("Please select a file, not a folder")
+            return
+
+        self._presenter.handle_generate_link(filename)
 
     def show_image_preview(self, image_data: bytes, filename: str) -> None:
         """Show image preview dialog.

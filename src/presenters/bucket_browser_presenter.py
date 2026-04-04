@@ -740,6 +740,55 @@ class BucketBrowserPresenter(BasePresenter):
         # Start download
         self._download_worker.start()
 
+    def handle_generate_link(self, filename: str) -> None:
+        """Handle generate link request from view.
+
+        Opens a dialog for generating pre-signed URL.
+
+        Args:
+            filename: Name of the file to generate link for
+        """
+        if not self._s3_service:
+            self._view.show_error("Generate link not available in mock mode")
+            return
+
+        # Construct full S3 key
+        if self._current_prefix:
+            key = f"{self._current_prefix}{filename}"
+        else:
+            key = filename
+
+        # Import and show dialog
+        from src.views.generate_link_dialog import GenerateLinkDialog
+
+        dialog = GenerateLinkDialog(filename, self._view)
+
+        # Connect generate button
+        dialog.get_generate_button().clicked.connect(
+            lambda: self._generate_link(dialog, key)
+        )
+
+        # Connect copy button
+        dialog.get_copy_button().clicked.connect(dialog.copy_to_clipboard)
+
+        dialog.exec()
+
+    def _generate_link(self, dialog, key: str) -> None:
+        """Generate the pre-signed URL."""
+        try:
+            self._view.show_loading(True)
+
+            expiration_hours = dialog.get_selected_expiration_hours()
+            url = self._s3_service.generate_presigned_url(key, expiration_hours)
+
+            dialog.set_generated_url(url)
+            self._view.show_message("Link generated successfully")
+
+        except Exception as e:
+            self._view.show_error(str(e))
+        finally:
+            self._view.show_loading(False)
+
     def _on_download_finished(self, progress_dialog, filename: str) -> None:
         """Handle successful download completion.
 
