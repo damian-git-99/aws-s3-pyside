@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QClipboard
+from PySide6.QtGui import QGuiApplication
 
 
 class GenerateLinkDialog(QDialog):
@@ -117,6 +117,6 @@ class GenerateLinkDialog(QDialog):
     def copy_to_clipboard(self):
         """Copy URL to clipboard and show confirmation."""
         if self._generated_url:
-            clipboard = QClipboard()
+            clipboard = QGuiApplication.clipboard()
             clipboard.setText(self._generated_url)
             QMessageBox.information(self, "Copied", "Link copied to clipboard!")
