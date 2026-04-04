@@ -259,7 +259,7 @@ class BucketBrowserView(BaseView):
         # Generate Link button - creates pre-signed URL for selected file
         self._generate_link_btn = QPushButton("Generate Link")
         self._generate_link_btn.setObjectName("generate_link_btn")
-        self._generate_link_btn.setFixedSize(100, 28)
+        self._generate_link_btn.setFixedSize(130, 28)
         self._generate_link_btn.setEnabled(False)
         self._generate_link_btn.setStyleSheet(
             """
