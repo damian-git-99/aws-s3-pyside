@@ -7,75 +7,50 @@
 
 ### Pre-signed URL Generation
 
-- [ ] **URL-01**: User can right-click on any file to open context menu with "Generate Link" option
-- [ ] **URL-02**: User can select expiration time from presets: 1 hour, 1 day, 7 days, or custom
+- [ ] **URL-01**: User can click "Generate Link" button in toolbar to open link dialog
+- [ ] **URL-02**: User can select expiration time: 1 hour, 1 day, 7 days, or 30 days
 - [ ] **URL-03**: System generates valid pre-signed URL using boto3 with selected expiration
-- [ ] **URL-04**: Generated URL is displayed in a modal dialog with full URL text
+- [ ] **URL-04**: Generated URL is displayed in the dialog text field
 - [ ] **URL-05**: User can click "Copy to Clipboard" button to copy URL immediately
-- [ ] **URL-06**: URL automatically copies to clipboard when generated (configurable)
-- [ ] **URL-07**: Modal shows expiration time and remaining time until expiration
-- [ ] **URL-08**: User can regenerate URL with different expiration without closing modal
-- [ ] **URL-09**: Error handling for generation failures (permissions, network)
-- [ ] **URL-10**: URL history is not stored (security - no persistence)
+- [ ] **URL-06**: Error handling for generation failures (permissions, network)
 
-### UI/UX
+### Existing Features (Validated)
 
-- [ ] **UI-01**: Context menu appears on right-click of file row
-- [ ] **UI-02**: Keyboard shortcut (Ctrl+Shift+C) opens link dialog for selected file
-- [ ] **UI-03**: Visual feedback when URL is copied (toast notification)
-- [ ] **UI-04**: Loading state shown while URL is being generated
-- [ ] **UI-05**: Dialog is resizable and shows full URL without truncation
-
-## v2 Requirements
-
-### Advanced URL Features
-
-- **URL-V2-01**: Batch URL generation for multiple selected files
-- **URL-V2-02**: QR code generation for mobile sharing
-- **URL-V2-03**: URL templates/presets (custom default expiration)
-- **URL-V2-04**: Recently generated URLs list (session-only)
-
-### Sharing Features
-
-- **URL-V2-05**: Email link directly from app
-- **URL-V2-06**: Share to system share sheet (macOS/iOS)
+- ✓ User can browse S3 bucket contents with folder navigation — existing
+- ✓ User can upload files to S3 via drag-and-drop or file picker — existing
+- ✓ User can download files from S3 to local machine — existing
+- ✓ User can delete files from S3 — existing
+- ✓ User can preview images directly in the app — existing
+- ✓ User can configure AWS credentials via setup wizard — existing
+- ✓ User can search/filter files in the current folder — existing
+- ✓ User can navigate with breadcrumbs — existing
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Permanent public URLs | Security risk - pre-signed only for v1 |
-| Custom domain/CNAME support | Requires CloudFront or proxy - complexity out of scope |
-| URL analytics/tracking | No infrastructure for analytics |
-| Password-protected URLs | Not supported by S3 pre-signed URLs natively |
-| Short URL generation | Would require external service integration |
-| Multi-file link generation | Complex UX, defer to v2 |
+| Context menu (right-click) | Button in toolbar is simpler |
+| Auto-copy to clipboard | Manual copy button is explicit |
+| Keyboard shortcuts | Not requested |
+| Batch URL generation | Single file at a time |
+| URL history | Security - no persistence |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| URL-01 | Phase 1 | Pending |
-| URL-02 | Phase 1 | Pending |
-| URL-03 | Phase 1 | Pending |
-| URL-04 | Phase 1 | Pending |
-| URL-05 | Phase 1 | Pending |
-| URL-06 | Phase 2 | Pending |
-| URL-07 | Phase 2 | Pending |
-| URL-08 | Phase 2 | Pending |
-| URL-09 | Phase 2 | Pending |
-| URL-10 | Phase 2 | Pending |
-| UI-01 | Phase 1 | Pending |
-| UI-02 | Phase 2 | Pending |
-| UI-03 | Phase 2 | Pending |
-| UI-04 | Phase 1 | Pending |
-| UI-05 | Phase 2 | Pending |
+| URL-01 | 1 | Pending |
+| URL-02 | 1 | Pending |
+| URL-03 | 1 | Pending |
+| URL-04 | 1 | Pending |
+| URL-05 | 1 | Pending |
+| URL-06 | 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 15 total
-- Mapped to phases: 15
+- v1 requirements: 6 total
+- Mapped to phases: 6
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2025-01-20*
-*Last updated: 2025-01-20 after initial definition*
+*Last updated: 2025-01-20 after simplification to single phase*

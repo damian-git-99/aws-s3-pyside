@@ -1,8 +1,8 @@
-# Phase 1: Foundation
+# Phase 1: Generate Pre-signed Links
 
 **Phase:** 1  
 **Wave:** 1  
-**Depends On:** (none - first phase)  
+**Depends On:** (none)  
 **Files Modified:** 
 - src/services/s3_service.py
 - src/services/s3_errors.py
@@ -14,17 +14,23 @@
 
 ## Objective
 
-Add right-click context menu and basic pre-signed URL generation capability. User can right-click any file, select "Generate Link", and see a valid pre-signed URL in a modal dialog.
+Add a "Generate Link" button to the toolbar. When clicked with a file selected, opens a dialog to generate pre-signed URLs with configurable expiration. User can generate URL and copy to clipboard.
 
 ---
 
-## Requirements Addressed
+## Requirements
 
-- **URL-01**: Context menu with "Generate Link" option
-- **URL-03**: Generate pre-signed URL via boto3
-- **URL-04**: Display URL in modal dialog
-- **UI-01**: Right-click context menu on file rows
-- **UI-04**: Loading state during generation
+- User clicks "Generate Link" button in toolbar
+- If no file selected → error message
+- If folder selected → error message (links only for files)
+- Dialog opens with:
+  - Selected filename displayed
+  - Expiration dropdown (1 hour, 1 day, 7 days, 30 days)
+  - "Generate" button
+  - Generated URL display area (hidden until generated)
+  - "Copy to Clipboard" button (enabled after generation)
+  - "Close" button
+- URL is copied when user clicks "Copy"
 
 ---
 
@@ -33,315 +39,406 @@ Add right-click context menu and basic pre-signed URL generation capability. Use
 ### Task 1: Add S3FileService.generate_presigned_url() method
 
 <read_first>
-- src/services/s3_service.py (existing S3FileService class)
-- src/services/s3_errors.py (existing error hierarchy)
+- src/services/s3_service.py
+- src/services/s3_errors.py
 </read_first>
 
 <action>
-Add the `generate_presigned_url()` method to the S3FileService class in src/services/s3_service.py after the download_fileobj method (around line 385).
+Add method to S3FileService class:
 
-The method should:
-1. Accept parameters: `key: str`, `expiration_hours: int = 1`
-2. Generate a pre-signed URL using boto3's `generate_presigned_url()` method
-3. Handle ClientError exceptions and convert to appropriate S3Error types
-4. Return the pre-signed URL string
-
-Also add `S3PresignedUrlError` exception class to src/services/s3_errors.py following the existing pattern (similar to S3DownloadError).
-
-Method signature:
 ```python
 def generate_presigned_url(self, key: str, expiration_hours: int = 1) -> str:
-    """Generate a pre-signed URL for downloading an S3 object.
-    
-    Creates a temporary URL that allows access to the object without
-    AWS credentials. The URL expires after the specified duration.
-    
-    Args:
-        key: The S3 key (path) of the object
-        expiration_hours: URL validity duration in hours (default: 1, max: 168)
-        
-    Returns:
-        Pre-signed URL string
-        
-    Raises:
-        S3AccessDeniedError: If credentials lack bucket read permission
-        S3BucketNotFoundError: If bucket doesn't exist
-        S3ObjectNotFoundError: If object doesn't exist in bucket
-        S3CredentialsError: If AWS credentials are missing/invalid
-        S3ConnectionError: If cannot connect to AWS
-        S3PresignedUrlError: If URL generation fails for other reasons
-    """
+    """Generate a pre-signed URL for downloading an S3 object."""
+    try:
+        url = self._s3.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': self.bucket_name, 'Key': key},
+            ExpiresIn=expiration_hours * 3600
+        )
+        return url
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+        if error_code in ('403', 'AccessDenied'):
+            raise S3AccessDeniedError(self.bucket_name) from e
+        elif error_code in ('404', 'NoSuchBucket'):
+            raise S3BucketNotFoundError(self.bucket_name) from e
+        elif error_code == 'NoSuchKey':
+            raise S3ObjectNotFoundError(key) from e
+        else:
+            raise S3PresignedUrlError(key, str(e)) from e
+    except NoCredentialsError as e:
+        raise S3CredentialsError() from e
+    except EndpointConnectionError as e:
+        raise S3ConnectionError() from e
 ```
-</action>
 
-<acceptance_criteria>
-- src/services/s3_service.py contains `def generate_presigned_url(self, key: str, expiration_hours: int = 1) -> str:` method
-- Method uses `self._s3.generate_presigned_url('get_object', ...)` with ExpiresIn calculated as `expiration_hours * 3600`
-- Method handles ClientError with error_code checks for '403', 'AccessDenied', '404', 'NoSuchBucket', 'NoSuchKey'
-- src/services/s3_errors.py contains `class S3PresignedUrlError(S3Error):` with proper constructor
-- All error cases raise appropriate S3Error subclasses
-</acceptance_criteria>
-
----
-
-### Task 2: Create GenerateLinkDialog class
-
-<read_first>
-- src/views/image_preview_dialog.py (reference for dialog structure)
-- src/utils/styles.py (for consistent styling)
-</read_first>
-
-<action>
-Create new file src/views/generate_link_dialog.py with the GenerateLinkDialog class.
-
-The dialog should:
-1. Extend QDialog
-2. Accept filename and generated URL as constructor parameters
-3. Display the filename prominently at the top
-4. Show the full URL in a read-only QLineEdit (selectable, copyable)
-5. Include a "Close" button
-6. Set minimum size of 500x200 pixels
-7. Make URL text selectable for manual copy
-8. Follow existing dialog patterns from ImagePreviewDialog
-
-Dialog structure:
-- Title: "Generate Link - {filename}"
-- Label: "Pre-signed URL (expires in 1 hour):"
-- URL display: read-only QLineEdit with the URL
-- Close button: QPushButton that closes the dialog
-
-Apply consistent styling using the application's style patterns.
-</action>
-
-<acceptance_criteria>
-- File src/views/generate_link_dialog.py exists
-- Class `GenerateLinkDialog(QDialog)` is defined
-- Constructor signature: `__init__(self, filename: str, url: str, parent=None)`
-- Dialog displays filename in window title: `f"Generate Link - {filename}"`
-- Dialog contains QLineEdit displaying the URL with `setReadOnly(True)`
-- Dialog has Close button that calls `self.accept()`
-- Dialog minimum size is 500x200 pixels
-</acceptance_criteria>
-
----
-
-### Task 3: Add context menu to BucketBrowserView
-
-<read_first>
-- src/views/bucket_browser_view.py (table setup and event handling)
-- PySide6.QtWidgets.QMenu documentation for context menu
-</read_first>
-
-<action>
-Add context menu support to the table in BucketBrowserView.
-
-In src/views/bucket_browser_view.py:
-1. Import QMenu from PySide6.QtWidgets (add to existing imports)
-2. In _setup_table() method, set table context menu policy: `self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)`
-3. Connect the customContextMenuRequested signal to a new handler: `self._table.customContextMenuRequested.connect(self._on_table_context_menu)`
-4. Add callback handler `_on_table_context_menu(self, position)` that:
-   - Gets the selected row at the click position
-   - Checks if a file (not folder) is selected
-   - Creates QMenu with "Generate Link" action
-   - Calls presenter method when action is triggered
-
-Add presenter callback pattern (similar to other callbacks in the view):
-- Add `_on_generate_link_callback: Optional[callable] = None` in __init__
-- Add `set_on_generate_link_callback(self, callback: callable)` method
-- Call `self._on_generate_link_callback(filename)` when "Generate Link" is selected
-
-Ensure the context menu only appears for files (not folders) and when a row is selected.
-</action>
-
-<acceptance_criteria>
-- src/views/bucket_browser_view.py imports QMenu
-- _setup_table() sets `self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)`
-- _setup_table() connects `self._table.customContextMenuRequested.connect(self._on_table_context_menu)`
-- Method `_on_table_context_menu(self, position)` exists and handles right-click
-- Method checks if selected item is a file (not folder) before showing menu
-- Context menu contains QAction with text "Generate Link"
-- View has `set_on_generate_link_callback(self, callback: callable)` method
-- When "Generate Link" is clicked, it calls the callback with the filename
-</acceptance_criteria>
-
----
-
-### Task 4: Add presenter methods for link generation
-
-<read_first>
-- src/presenters/bucket_browser_presenter.py (existing presenter structure)
-- src/presenters/bucket_browser_presenter.py (UploadWorker/DownloadWorker patterns)
-</read_first>
-
-<action>
-Add methods to BucketBrowserPresenter for handling link generation.
-
-In src/presenters/bucket_browser_presenter.py:
-
-1. Add callback registration in view setup:
-   - In the presenter initialization, call `self._view.set_on_generate_link_callback(self._on_generate_link_clicked)`
-
-2. Add `_on_generate_link_clicked(self, filename: str)` method that:
-   - Constructs the full S3 key using current prefix and filename
-   - Calls `self._generate_link(key)`
-
-3. Add `_generate_link(self, key: str)` method that:
-   - Shows loading state via view
-   - Calls `self._s3_service.generate_presigned_url(key, expiration_hours=1)`
-   - On success: extracts filename from key, calls `self._view.show_generate_link_dialog(filename, url)`
-   - On error: catches S3Error exceptions, shows error via `self._view.show_error()`
-   - Finally: hides loading state
-
-4. Import GenerateLinkDialog at top of file
-
-Follow the existing error handling pattern used in handle_delete_file() and handle_download_file().
-</action>
-
-<acceptance_criteria>
-- Presenter calls `self._view.set_on_generate_link_callback(self._on_generate_link_clicked)` during initialization
-- Method `_on_generate_link_clicked(self, filename: str)` exists and constructs S3 key
-- Method `_generate_link(self, key: str)` exists and handles URL generation
-- Method calls `self._s3_service.generate_presigned_url(key, expiration_hours=1)`
-- On success, calls `self._view.show_generate_link_dialog(filename, url)`
-- On S3Error, calls `self._view.show_error(str(error))`
-- Loading state is shown/hidden around the operation
-</acceptance_criteria>
-
----
-
-### Task 5: Add show_generate_link_dialog to view
-
-<read_first>
-- src/views/bucket_browser_view.py (existing dialog methods)
-- src/views/generate_link_dialog.py (the dialog created in Task 2)
-</read_first>
-
-<action>
-Add the show_generate_link_dialog method to BucketBrowserView.
-
-In src/views/bucket_browser_view.py:
-
-1. Import GenerateLinkDialog at the top (with other dialog imports)
-
-2. Add method:
+Add to src/services/s3_errors.py:
 ```python
-def show_generate_link_dialog(self, filename: str, url: str) -> None:
-    """Show dialog with generated pre-signed URL.
-    
-    Args:
-        filename: Name of the file
-        url: The pre-signed URL
-    """
-    dialog = GenerateLinkDialog(filename, url, self)
-    dialog.exec()
+class S3PresignedUrlError(S3Error):
+    """Error generating pre-signed URL."""
+    def __init__(self, key: str, message: str = ""):
+        self.key = key
+        super().__init__(f"Failed to generate link for '{key}': {message}")
 ```
-
-3. Ensure the dialog is modal (blocks interaction with main window until closed)
-
-Follow the same pattern as show_image_preview() method.
 </action>
 
 <acceptance_criteria>
-- src/views/bucket_browser_view.py imports GenerateLinkDialog
-- Method `show_generate_link_dialog(self, filename: str, url: str)` exists
-- Method creates GenerateLinkDialog with filename and url parameters
-- Method calls dialog.exec() to show modal dialog
+- S3FileService has generate_presigned_url method
+- Method accepts key and expiration_hours parameters
+- Method returns pre-signed URL string
+- All error cases raise appropriate S3Error
+- S3PresignedUrlError class exists in s3_errors.py
 </acceptance_criteria>
 
 ---
 
-### Task 6: Add loading state during URL generation
+### Task 2: Create GenerateLinkDialog
 
 <read_first>
-- src/views/bucket_browser_view.py (existing show_loading method)
+- src/views/image_preview_dialog.py (reference)
 </read_first>
 
 <action>
-Ensure loading state is properly shown during URL generation.
+Create src/views/generate_link_dialog.py:
 
-In src/presenters/bucket_browser_presenter.py, verify the _generate_link method:
-1. Calls `self._view.show_loading(True)` before starting URL generation
-2. Calls `self._view.show_loading(False)` in a finally block after generation completes (success or error)
+```python
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+    QPushButton, QComboBox, QLineEdit, QMessageBox
+)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QClipboard
 
-The view's show_loading() method should already exist and update the status label. Verify it works correctly by checking that:
-- When called with True: status label shows "Loading..."
-- When called with False: status label returns to "Ready" or previous state
 
-No changes needed to view if show_loading() already exists (which it should from existing code).
+class GenerateLinkDialog(QDialog):
+    """Dialog for generating pre-signed URLs."""
+    
+    def __init__(self, filename: str, parent=None):
+        super().__init__(parent)
+        self._filename = filename
+        self._generated_url = ""
+        self.setWindowTitle(f"Generate Link - {filename}")
+        self.setModal(True)
+        self.resize(600, 250)
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Filename label
+        file_label = QLabel(f"File: <b>{self._filename}</b>")
+        layout.addWidget(file_label)
+        
+        # Expiration selection
+        expiration_layout = QHBoxLayout()
+        expiration_label = QLabel("Link expires in:")
+        self._expiration_combo = QComboBox()
+        self._expiration_combo.addItem("1 hour", 1)
+        self._expiration_combo.addItem("1 day", 24)
+        self._expiration_combo.addItem("7 days", 168)
+        self._expiration_combo.addItem("30 days", 720)
+        expiration_layout.addWidget(expiration_label)
+        expiration_layout.addWidget(self._expiration_combo)
+        expiration_layout.addStretch()
+        layout.addLayout(expiration_layout)
+        
+        # Generate button
+        self._generate_btn = QPushButton("Generate Link")
+        self._generate_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        layout.addWidget(self._generate_btn)
+        
+        # URL display (hidden initially)
+        url_label = QLabel("Generated URL:")
+        layout.addWidget(url_label)
+        
+        self._url_input = QLineEdit()
+        self._url_input.setReadOnly(True)
+        self._url_input.setPlaceholderText("Click 'Generate Link' to create URL")
+        layout.addWidget(self._url_input)
+        
+        # Copy button (disabled initially)
+        self._copy_btn = QPushButton("Copy to Clipboard")
+        self._copy_btn.setEnabled(False)
+        self._copy_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #229954;
+            }
+            QPushButton:disabled {
+                background-color: #95a5a6;
+            }
+        """)
+        layout.addWidget(self._copy_btn)
+        
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.reject)
+        layout.addWidget(close_btn)
+        
+        self.setLayout(layout)
+    
+    def get_selected_expiration_hours(self) -> int:
+        """Return selected expiration in hours."""
+        return self._expiration_combo.currentData()
+    
+    def set_generated_url(self, url: str):
+        """Display the generated URL."""
+        self._generated_url = url
+        self._url_input.setText(url)
+        self._copy_btn.setEnabled(True)
+    
+    def get_generate_button(self) -> QPushButton:
+        """Return generate button for connecting signals."""
+        return self._generate_btn
+    
+    def get_copy_button(self) -> QPushButton:
+        """Return copy button for connecting signals."""
+        return self._copy_btn
+    
+    def copy_to_clipboard(self):
+        """Copy URL to clipboard and show confirmation."""
+        if self._generated_url:
+            clipboard = QClipboard()
+            clipboard.setText(self._generated_url)
+            QMessageBox.information(self, "Copied", "Link copied to clipboard!")
+```
 </action>
 
 <acceptance_criteria>
-- Presenter's `_generate_link()` method calls `self._view.show_loading(True)` before S3 call
-- Presenter's `_generate_link()` method has try/finally block
-- Finally block calls `self._view.show_loading(False)`
-- View's show_loading() method updates status label text
+- GenerateLinkDialog class exists in src/views/generate_link_dialog.py
+- Dialog shows filename in title
+- Dialog has expiration dropdown with 4 options
+- Dialog has Generate, Copy, and Close buttons
+- URL display shows placeholder until generated
+- Copy button is disabled until URL is generated
+</acceptance_criteria>
+
+---
+
+### Task 3: Add "Generate Link" button to toolbar
+
+<read_first>
+- src/views/bucket_browser_view.py (_setup_toolbar method)
+</read_first>
+
+<action>
+Add button to toolbar in _setup_toolbar() method, after Preview button (line 255) and before Settings button:
+
+```python
+# Generate Link button - creates pre-signed URL for selected file
+self._generate_link_btn = QPushButton("Generate Link")
+self._generate_link_btn.setObjectName("generate_link_btn")
+self._generate_link_btn.setFixedSize(100, 28)
+self._generate_link_btn.setEnabled(False)  # Disabled by default
+self._generate_link_btn.setStyleSheet("""
+    QPushButton {
+        background-color: #f39c12;
+        color: white;
+        border: none;
+        border-radius: 3px;
+    }
+    QPushButton:hover {
+        background-color: #e67e22;
+    }
+    QPushButton:disabled {
+        background-color: #bdc3c7;
+        color: #7f8c8d;
+    }
+""")
+self._generate_link_btn.clicked.connect(self._on_generate_link_clicked)
+self._toolbar.addWidget(self._generate_link_btn)
+```
+
+Add callback handler:
+```python
+def _on_generate_link_clicked(self) -> None:
+    """Handle Generate Link button click."""
+    if not self._presenter:
+        return
+    
+    selected_rows = self._table.selectionModel().selectedRows()
+    if not selected_rows:
+        self.show_error("Please select a file first")
+        return
+    
+    row = selected_rows[0].row()
+    name_item = self._table.item(row, 0)
+    if not name_item:
+        return
+    
+    filename = name_item.text()
+    
+    # Check if folder
+    is_folder = False
+    for obj in getattr(self, "_current_data", []):
+        if obj.name == filename:
+            is_folder = obj.is_folder
+            break
+    
+    if is_folder:
+        self.show_error("Please select a file, not a folder")
+        return
+    
+    self._presenter.handle_generate_link(filename)
+```
+
+Add method to enable/disable button:
+```python
+def enable_generate_link_button(self, enabled: bool) -> None:
+    """Enable or disable the generate link button."""
+    if self._generate_link_btn:
+        self._generate_link_btn.setEnabled(enabled)
+```
+
+Update selection change handler to enable button for files:
+```python
+def _on_selection_changed(self) -> None:
+    """Handle table selection change."""
+    selected_rows = self._table.selectionModel().selectedRows()
+    if not selected_rows:
+        self.enable_preview_button(False)
+        self.enable_generate_link_button(False)
+        return
+    
+    row = selected_rows[0].row()
+    name_item = self._table.item(row, 0)
+    if not name_item:
+        return
+    
+    filename = name_item.text()
+    
+    # Find the object
+    for obj in getattr(self, "_current_data", []):
+        if obj.name == filename:
+            is_image = obj.get_icon_type() == "image"
+            is_folder = obj.is_folder
+            self.enable_preview_button(is_image and not is_folder)
+            self.enable_generate_link_button(not is_folder)
+            break
+```
+
+Import GenerateLinkDialog at top of file.
+</action>
+
+<acceptance_criteria>
+- Toolbar has "Generate Link" button with orange color (#f39c12)
+- Button is disabled by default
+- Button is enabled when a file (not folder) is selected
+- Button is disabled when a folder is selected
+- Button click calls presenter method with filename
+</acceptance_criteria>
+
+---
+
+### Task 4: Add presenter logic
+
+<read_first>
+- src/presenters/bucket_browser_presenter.py
+</read_first>
+
+<action>
+Add to BucketBrowserPresenter:
+
+```python
+def handle_generate_link(self, filename: str) -> None:
+    """Handle generate link request from view."""
+    # Construct full S3 key
+    if self._current_prefix:
+        key = f"{self._current_prefix}{filename}"
+    else:
+        key = filename
+    
+    # Show dialog
+    from src.views.generate_link_dialog import GenerateLinkDialog
+    dialog = GenerateLinkDialog(filename, self._view)
+    
+    # Connect generate button
+    dialog.get_generate_button().clicked.connect(
+        lambda: self._generate_link(dialog, key)
+    )
+    
+    # Connect copy button
+    dialog.get_copy_button().clicked.connect(dialog.copy_to_clipboard)
+    
+    dialog.exec()
+
+def _generate_link(self, dialog, key: str) -> None:
+    """Generate the pre-signed URL."""
+    try:
+        self._view.show_loading(True)
+        
+        expiration_hours = dialog.get_selected_expiration_hours()
+        url = self._s3_service.generate_presigned_url(key, expiration_hours)
+        
+        dialog.set_generated_url(url)
+        self._view.show_message("Link generated successfully")
+        
+    except S3Error as e:
+        self._view.show_error(str(e))
+    finally:
+        self._view.show_loading(False)
+```
+</action>
+
+<acceptance_criteria>
+- Presenter has handle_generate_link method
+- Method constructs full S3 key from current prefix + filename
+- Method creates and shows GenerateLinkDialog
+- Generate button connected to _generate_link method
+- Copy button connected to dialog's copy_to_clipboard method
+- _generate_link gets expiration from dialog
+- _generate_link calls s3_service.generate_presigned_url
+- Loading state shown during generation
+- Errors shown via show_error
 </acceptance_criteria>
 
 ---
 
 ## Verification
 
-### Manual Testing Steps
-
-1. Launch application and navigate to a bucket with files
-2. Right-click on a file (not folder)
-3. Verify context menu appears with "Generate Link" option
-4. Click "Generate Link"
-5. Verify loading indicator shows briefly
-6. Verify modal dialog opens showing:
-   - Title: "Generate Link - {filename}"
-   - The full pre-signed URL
-7. Verify URL can be selected/copied from the dialog
-8. Verify URL works when pasted in browser (downloads file)
-9. Click Close button - dialog should close
-
-### Error Cases to Test
-
-1. Right-click on folder - no "Generate Link" option should appear
-2. Right-click on empty space - no context menu should appear
-3. Generate link with no network - error message should display
-4. Generate link for deleted file - error message should display
+1. Launch app
+2. Select a file (not folder)
+3. Click "Generate Link" button
+4. Dialog opens showing filename
+5. Select expiration (e.g., 7 days)
+6. Click "Generate"
+7. URL appears in text field
+8. Click "Copy to Clipboard"
+9. Confirmation message appears
+10. Paste URL in browser → file downloads
+11. Close dialog
 
 ---
 
-## Must-Haves
+## Success Criteria
 
-- [ ] Context menu infrastructure in view layer
-- [ ] S3FileService.generate_presigned_url() method
-- [ ] GenerateLinkDialog for URL display
-- [ ] Presenter methods to wire view to service
-- [ ] Error handling for S3 API failures
-- [ ] Loading state during generation
-
----
-
-## Implementation Notes
-
-**MVP Pattern Compliance:**
-- View: Shows context menu, displays dialog
-- Presenter: Handles user action, calls service, updates view
-- Service: Generates pre-signed URL via boto3
-- Model: BucketObject data used for determining file vs folder
-
-**boto3 generate_presigned_url Parameters:**
-```python
-url = self._s3.generate_presigned_url(
-    'get_object',
-    Params={'Bucket': self.bucket_name, 'Key': key},
-    ExpiresIn=expiration_hours * 3600
-)
-```
-
-**Qt Context Menu:**
-- Use `Qt.ContextMenuPolicy.CustomContextMenu`
-- Signal: `customContextMenuRequested(QPoint)`
-- Map position to row: `table.rowAt(position.y())`
-
-**Security Note:**
-- Pre-signed URLs are temporary (default 1 hour)
-- No URL persistence (as per requirement URL-10)
-- URLs generated fresh each time (no caching)
+- [ ] "Generate Link" button visible in toolbar
+- [ ] Button disabled when no selection or folder selected
+- [ ] Dialog opens with filename and expiration options
+- [ ] URL generates successfully
+- [ ] URL can be copied to clipboard
+- [ ] Copied URL works in browser
+- [ ] Error handling works for network/permission issues
 
 ---
 
-*Plan created: 2025-01-20*
+*Plan simplified for single-phase implementation*
