@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "aws-s3-pyside",
+    "type": "brownfield",
+    "initialized": "2025-01-20"
+  },
+  "workflow": {
+    "mode": "interactive",
+    "granularity": "standard",
+    "parallelization": true,
+    "commit_docs": true,
+    "model_profile": "inherit",
+    "research": true,
+    "plan_check": true,
+    "verifier": true
+  },
+  "agents": {
+    "researcher": "inherit",
+    "synthesizer": "inherit",
+    "roadmapper": "inherit"
+  },
+  "planning": {
+    "commit_docs": true,
+    "sub_repos": []
+  }
+}
