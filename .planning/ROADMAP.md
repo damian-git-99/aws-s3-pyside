@@ -29,20 +29,20 @@
 - URL-06: Error handling
 
 **Success Criteria:**
-1. "Generate Link" button visible in toolbar
-2. Button enabled only when file (not folder) selected
-3. Dialog opens with filename and expiration dropdown
-4. URL generates with selected expiration
-5. URL can be copied to clipboard
-6. Error messages show for failures
+1. "Generate Link" button visible in toolbar ✓
+2. Button enabled only when file (not folder) selected ✓
+3. Dialog opens with filename and expiration dropdown ✓
+4. URL generates with selected expiration ✓
+5. URL can be copied to clipboard ✓
+6. Error messages show for failures ✓
 
 **Must-haves:**
-- [ ] S3FileService.generate_presigned_url() method
-- [ ] GenerateLinkDialog with all UI elements
-- [ ] Toolbar button with proper enable/disable logic
-- [ ] Presenter to wire everything together
-- [ ] Copy to clipboard functionality
-- [ ] Error handling
+- [x] S3FileService.generate_presigned_url() method
+- [x] GenerateLinkDialog with all UI elements
+- [x] Toolbar button with proper enable/disable logic
+- [x] Presenter to wire everything together
+- [x] Copy to clipboard functionality
+- [x] Error handling
 
 ---
 
