@@ -57,8 +57,6 @@ class BucketBrowserView(BaseView):
         self._content_container: Optional[QWidget] = None
         self._stacked_layout: Optional[QStackedLayout] = None
         self._on_settings_callback: Optional[callable] = None
-        self._preview_btn: Optional[QPushButton] = None
-        self._generate_link_btn: Optional[QPushButton] = None
         self._search_input: Optional[QLineEdit] = None
         self._on_search_callback: Optional[callable] = None
 
@@ -190,96 +188,6 @@ class BucketBrowserView(BaseView):
         upload_btn.setObjectName("upload_btn")
         upload_btn.clicked.connect(self._on_upload_clicked)
         self._toolbar.addWidget(upload_btn)
-
-        # Delete button - deletes selected file
-        delete_btn = QPushButton("Delete")
-        delete_btn.setObjectName("delete_btn")
-        delete_btn.setFixedSize(80, 28)
-        delete_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #e74c3c;
-                color: white;
-                border: none;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
-        """
-        )
-        delete_btn.clicked.connect(self._on_delete_selected_clicked)
-        self._toolbar.addWidget(delete_btn)
-
-        # Download button - downloads selected file
-        download_btn = QPushButton("Download")
-        download_btn.setObjectName("download_btn")
-        download_btn.setFixedSize(100, 28)
-        download_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """
-        )
-        download_btn.clicked.connect(self._on_download_clicked)
-        self._toolbar.addWidget(download_btn)
-
-        # Preview button - shows preview for selected image file
-        self._preview_btn = QPushButton("Preview")
-        self._preview_btn.setObjectName("preview_btn")
-        self._preview_btn.setFixedSize(80, 28)
-        self._preview_btn.setEnabled(False)  # Disabled by default
-        self._preview_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #9b59b6;
-                color: white;
-                border: none;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #8e44ad;
-            }
-            QPushButton:disabled {
-                background-color: #bdc3c7;
-                color: #7f8c8d;
-            }
-        """
-        )
-        self._preview_btn.clicked.connect(self._on_preview_clicked)
-        self._toolbar.addWidget(self._preview_btn)
-
-        # Generate Link button - creates pre-signed URL for selected file
-        self._generate_link_btn = QPushButton("Generate Link")
-        self._generate_link_btn.setObjectName("generate_link_btn")
-        self._generate_link_btn.setFixedSize(130, 28)
-        self._generate_link_btn.setEnabled(False)
-        self._generate_link_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #f39c12;
-                color: white;
-                border: none;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #e67e22;
-            }
-            QPushButton:disabled {
-                background-color: #bdc3c7;
-                color: #7f8c8d;
-            }
-        """
-        )
-        self._generate_link_btn.clicked.connect(self._on_generate_link_clicked)
-        self._toolbar.addWidget(self._generate_link_btn)
 
         # Settings button
         self._settings_btn = QPushButton("Settings")
@@ -454,12 +362,15 @@ class BucketBrowserView(BaseView):
         # Connect selection change signal for preview button
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
 
+        # Setup context menu
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_context_menu)
+
     def _on_selection_changed(self) -> None:
-        """Handle table selection change to update preview button state."""
+        """Handle table selection change to update status bar with hint."""
         selected_rows = self._table.selectionModel().selectedRows()
         if not selected_rows:
-            self.enable_preview_button(False)
-            self.enable_generate_link_button(False)
+            self._update_status(len(getattr(self, "_current_data", []) or []))
             return
 
         row = selected_rows[0].row()
@@ -471,10 +382,10 @@ class BucketBrowserView(BaseView):
 
         for obj in getattr(self, "_current_data", []):
             if obj.name == filename:
-                is_image = obj.get_icon_type() == "image"
-                is_folder = obj.is_folder
-                self.enable_preview_button(is_image and not is_folder)
-                self.enable_generate_link_button(not is_folder)
+                count = len(getattr(self, "_current_data", []) or [])
+                self._status_label.setText(
+                    f"{count} objects | Right-click for more actions"
+                )
                 break
 
     def _is_image_selected(self) -> bool:
@@ -501,19 +412,63 @@ class BucketBrowserView(BaseView):
 
         return False
 
-    def enable_preview_button(self, enabled: bool) -> None:
-        """Enable or disable the preview button.
+    def _on_context_menu(self, pos) -> None:
+        """Handle context menu request on table.
 
         Args:
-            enabled: True to enable button, False to disable
+            pos: Position where the context menu was requested
         """
-        if self._preview_btn:
-            self._preview_btn.setEnabled(enabled)
+        # Check if there's a selected item
+        selected_rows = self._table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
 
-    def enable_generate_link_button(self, enabled: bool) -> None:
-        """Enable or disable the generate link button."""
-        if self._generate_link_btn:
-            self._generate_link_btn.setEnabled(enabled)
+        row = selected_rows[0].row()
+        name_item = self._table.item(row, 0)
+        if not name_item:
+            return
+
+        filename = name_item.text()
+
+        # Determine file properties
+        is_image = False
+        is_folder = False
+        for obj in getattr(self, "_current_data", []):
+            if obj.name == filename:
+                is_image = obj.get_icon_type() == "image"
+                is_folder = obj.is_folder
+                break
+
+        # Build the context menu
+        menu = QMenu(self._table)
+
+        # Preview action - only for image files (not folders)
+        if is_image and not is_folder:
+            preview_action = QAction("Preview", menu)
+            preview_action.triggered.connect(self._on_preview_clicked)
+            menu.addAction(preview_action)
+
+        # Download action - only for files (not folders)
+        if not is_folder:
+            download_action = QAction("Download", menu)
+            download_action.triggered.connect(self._on_download_clicked)
+            menu.addAction(download_action)
+
+            # Generate Link action - only for files (not folders)
+            generate_link_action = QAction("Generate Link", menu)
+            generate_link_action.triggered.connect(self._on_generate_link_clicked)
+            menu.addAction(generate_link_action)
+
+            # Separator before Delete
+            menu.addSeparator()
+
+            # Delete action - only for files (not folders)
+            delete_action = QAction("Delete", menu)
+            delete_action.triggered.connect(self._on_delete_selected_clicked)
+            menu.addAction(delete_action)
+
+        # Show menu at cursor position
+        menu.exec(self._table.mapToGlobal(pos))
 
     def _on_preview_clicked(self) -> None:
         """Handle preview button click."""
